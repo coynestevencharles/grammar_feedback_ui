@@ -1,7 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { ProcessedFeedback } from '../types/api';
 import {
-    useFloating,
     offset,
     flip,
     shift,

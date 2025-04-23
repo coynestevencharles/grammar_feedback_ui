@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback } from 'react';
-import { createEditor, Descendant, Text, Range, Editor, Node as SlateNode, Path, Point } from 'slate';
-import { Slate, Editable, withReact, ReactEditor, RenderLeafProps } from 'slate-react';
+import { Descendant, Text, Range, Editor, Node as SlateNode, Path, BaseRange } from 'slate';
+import { Slate, Editable, ReactEditor, RenderLeafProps } from 'slate-react';
 import { ProcessedFeedback } from '../types/api';
 import './EssayEditor.css';
 
@@ -19,6 +19,11 @@ type CustomText = {
     highlight?: boolean;
     activeHighlight?: boolean;
 };
+interface FeedbackRange extends BaseRange {
+    highlight: boolean;
+    feedbackId: string;
+    activeHighlight: boolean;
+}
 
 const EssayEditor: React.FC<EssayEditorProps> = ({
     editorInstance,
@@ -31,7 +36,7 @@ const EssayEditor: React.FC<EssayEditorProps> = ({
     const editor = editorInstance;
 
     const decorate = useCallback(([node, path]: [SlateNode, Path]): Range[] => {
-        const ranges: Range[] = [];
+        const ranges: FeedbackRange[] = [];
         if (!Text.isText(node) || feedbackList.length === 0) {
             return ranges;
         }

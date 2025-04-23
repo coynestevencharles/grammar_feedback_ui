@@ -1,26 +1,24 @@
 import axios from 'axios';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   BaseElement,
   createEditor,
   Descendant,
   Editor,
   Element,
-  Path,
   Point,
   Range,
-  RangeRef,
   Node as SlateNode,
   Text,
 } from 'slate';
-import { ReactEditor, withReact } from 'slate-react';
+import { withReact } from 'slate-react';
 import { v4 as uuidv4 } from 'uuid';
 import './App.css';
 import EssayEditor from './components/EssayEditor';
 import FeedbackCard from './components/FeedbackCard';
 import Controls from './components/controls';
 import { FeedbackComment, FeedbackResponse, ProcessedFeedback, UserRequest } from './types/api';
-import { apiBaseUrl, maxDrafts, validSystems, defaultSystem } from './utils/constants';
+import { apiBaseUrl, maxDrafts, defaultSystem } from './utils/constants';
 
 
 const getPlainText = (nodes: Descendant[]): string => {
@@ -44,14 +42,15 @@ const getPlainText = (nodes: Descendant[]): string => {
   return plainText;
 };
 
-const initialValue: Descendant[] = [{ type: 'paragraph', children: [{ text: '' }] }];
+//  NOTE: CHANGED
+const initialValue = [{ type: 'paragraph', children: [{ text: '' }] }];
 
 const offsetToPoint = (editor: Editor, offset: number): Point | null => {
   try {
     // Get all block nodes from the editor
     const blockEntries = Array.from(Editor.nodes(editor, {
       at: [],
-      match: n => Editor.isBlock(editor, n),
+      match: n => 'children' in n && Editor.isBlock(editor, n),
     }));
 
     if (blockEntries.length === 0) return null;
@@ -68,11 +67,8 @@ const offsetToPoint = (editor: Editor, offset: number): Point | null => {
 
       // Get text nodes within this block
       const textEntries = Array.from(
-        SlateNode.texts(blockNode as BaseElement)
-      ).map(([node, path]) => {
-        // Make the path absolute from the editor root
-        return [node, [...blockPath, ...path.slice(blockPath.length)]];
-      });
+        SlateNode.texts(blockNode as BaseElement, { from: [], to: [] })
+      );
 
       // Process each text node in this block
       for (const [textNode, textPath] of textEntries) {
@@ -319,12 +315,6 @@ function App() {
     setActiveFeedbackId(feedbackId);
     setReferenceElement(target);
 
-    try {
-      // Get bounding box of the current Slate Range
-      const domRange = ReactEditor.toDOMRange(editor, feedback.rangeRef.current);
-    } catch (error) {
-      console.error("Error calculating DOM range:", error);
-    }
   }, [editor, feedbackList, activeFeedbackId]);
 
   const handleDismissFeedback = useCallback((feedbackIdToDismiss: string) => {
@@ -361,17 +351,17 @@ function App() {
     <div className="app-container">
       <h1>Grammar Feedback Tool</h1>
       <div className="app-description">
-      Submit your essay draft, choose a feedback system, and click submit to see feedback on grammar, vocabulary, and spelling issues.
+        Submit your essay draft, choose a feedback system, and click submit to see feedback on grammar, vocabulary, and spelling issues.
       </div>
       <div className="editor-area" ref={editorRef}>
-      <EssayEditor
-        editorInstance={editor}
-        value={editorValue}
-        onChange={handleEditorChange}
-        feedbackList={feedbackList}
-        onHighlightClick={handleHighlightClick}
-        activeFeedbackId={activeFeedbackId}
-      />
+        <EssayEditor
+          editorInstance={editor}
+          value={editorValue}
+          onChange={handleEditorChange}
+          feedbackList={feedbackList}
+          onHighlightClick={handleHighlightClick}
+          activeFeedbackId={activeFeedbackId}
+        />
       </div>
       {activeFeedback && referenceElement && (
         <FeedbackCard
