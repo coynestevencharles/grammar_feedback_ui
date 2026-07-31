@@ -248,22 +248,9 @@ function App() {
   }, []);
 
   // Callback to update editor value
-  const handleEditorChange = useCallback(
-    (newValue: Descendant[]) => {
-      setEditorValue(newValue);
-
-      // Unref ranges when text is cleared
-      // const currentPlainText = getPlainText(newValue);
-      // if (currentPlainText.length === 0 && feedbackList.length > 0) {
-      //   console.log("Clearing feedback refs due to empty editor");
-      //   feedbackList.forEach(f => f.rangeRef?.unref());
-      //   setFeedbackList([]);
-      //   setActiveFeedbackId(null);
-      //   setReferenceElement(null);
-      // }
-    },
-    [feedbackList],
-  );
+  const handleEditorChange = useCallback((newValue: Descendant[]) => {
+    setEditorValue(newValue);
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     const currentText = getPlainText(editorValue);
@@ -317,10 +304,14 @@ function App() {
         setFeedbackList([]);
         console.log('No feedback items received.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('API Error encountered in handleSubmit:', err);
-      console.error('API Error Response:', err.response);
-      setError(err.response?.data?.detail || err.message || 'An unknown error occurred.');
+      if (axios.isAxiosError<{ detail?: string }>(err)) {
+        console.error('API Error Response:', err.response);
+        setError(err.response?.data?.detail || err.message || 'An unknown error occurred.');
+      } else {
+        setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+      }
       setFeedbackList([]);
     } finally {
       setIsLoading(false);
@@ -350,7 +341,7 @@ function App() {
       setActiveFeedbackId(feedbackId);
       setReferenceElement(target);
     },
-    [editor, feedbackList, activeFeedbackId],
+    [feedbackList, activeFeedbackId],
   );
 
   const handleDismissFeedback = useCallback(

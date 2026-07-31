@@ -17,7 +17,7 @@ export interface FeedbackComment {
 export interface FeedbackResponse {
   response_id: string;
   feedback_list: FeedbackComment[];
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface UserRequest {
