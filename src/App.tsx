@@ -267,7 +267,14 @@ function App() {
 
   const handleSubmit = useCallback(async () => {
     const currentText = getPlainText(editorValue);
-    console.log('handleSubmit triggered. Draft:', draftNumber, 'Text:', currentText);
+    console.log(
+      'handleSubmit triggered. Draft:',
+      draftNumber,
+      'System:',
+      systemChoice,
+      'Text:',
+      currentText,
+    );
 
     if (draftNumber > maxDrafts || !currentText.trim()) {
       if (draftNumber > maxDrafts) setError(`Maximum draft limit (${maxDrafts}) reached.`);
@@ -318,7 +325,7 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [editorValue, userId, draftNumber, apiBaseUrl, maxDrafts, editor, feedbackList]);
+  }, [editorValue, userId, draftNumber, editor, feedbackList, systemChoice]);
 
   const handleHighlightClick = useCallback(
     (feedbackId: string, event: React.MouseEvent) => {
