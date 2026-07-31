@@ -12,15 +12,16 @@ The default back end logic can be handled by `https://github.com/coynestevenchar
 
 ## Getting Started
 
-Download [Node.js](https://nodejs.org/)
+Install [Node.js](https://nodejs.org/) and npm.
 
-Install dependencies:
+Install the locked dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
-Configure `VITE_API_BASE_URL` in `.env`
+Configure `VITE_API_BASE_URL` in a local `.env` when the default
+`http://localhost:8000` is not appropriate. Do not commit `.env`.
 
 To launch for local development:
 
@@ -29,3 +30,17 @@ npm run dev
 ```
 
 Then open your browser and navigate to `http://localhost:5173`
+
+## Development checks
+
+```bash
+npm run format:check
+npm run lint
+npm run build
+```
+
+Prettier is the repository formatter. Apply it with:
+
+```bash
+npm run format
+```
