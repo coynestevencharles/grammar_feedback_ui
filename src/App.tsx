@@ -20,19 +20,18 @@ import Controls from './components/controls';
 import { FeedbackComment, FeedbackResponse, ProcessedFeedback, UserRequest } from './types/api';
 import { apiBaseUrl, maxDrafts, defaultSystem } from './utils/constants';
 
-
 const getPlainText = (nodes: Descendant[]): string => {
   // DEBUG: Log the nodes being processed
   // console.log("getPlainText called with nodes:", JSON.stringify(nodes, null, 2));
 
   // Return the plain text by joining the text of each node and accounting for newlines
   const plainText = nodes
-    .map(node => {
+    .map((node) => {
       if (Text.isText(node)) {
         return node.text;
       } else if (Element.isElement(node)) {
         // For elements, join their text children with a newline
-        return node.children.map(child => Text.isText(child) ? child.text : '').join('\n');
+        return node.children.map((child) => (Text.isText(child) ? child.text : '')).join('\n');
       }
       return '';
     })
@@ -48,10 +47,12 @@ const initialValue = [{ type: 'paragraph', children: [{ text: '' }] }];
 const offsetToPoint = (editor: Editor, offset: number): Point | null => {
   try {
     // Get all block nodes from the editor
-    const blockEntries = Array.from(Editor.nodes(editor, {
-      at: [],
-      match: n => 'children' in n && Editor.isBlock(editor, n),
-    }));
+    const blockEntries = Array.from(
+      Editor.nodes(editor, {
+        at: [],
+        match: (n) => 'children' in n && Editor.isBlock(editor, n),
+      }),
+    );
 
     if (blockEntries.length === 0) return null;
 
@@ -67,7 +68,7 @@ const offsetToPoint = (editor: Editor, offset: number): Point | null => {
 
       // Get text nodes within this block
       const textEntries = Array.from(
-        SlateNode.texts(blockNode as BaseElement, { from: [], to: [] })
+        SlateNode.texts(blockNode as BaseElement, { from: [], to: [] }),
       );
 
       // Process each text node in this block
@@ -80,7 +81,7 @@ const offsetToPoint = (editor: Editor, offset: number): Point | null => {
 
           return {
             path: textPath,
-            offset: localOffset
+            offset: localOffset,
           };
         }
 
@@ -96,7 +97,7 @@ const offsetToPoint = (editor: Editor, offset: number): Point | null => {
             const lastTextNode = textEntries[textEntries.length - 1][0];
             return {
               path: lastTextPath,
-              offset: lastTextNode.text.length
+              offset: lastTextNode.text.length,
             };
           } else {
             // Block with no text nodes
@@ -108,9 +109,8 @@ const offsetToPoint = (editor: Editor, offset: number): Point | null => {
 
     const lastBlock = blockEntries[blockEntries.length - 1];
     return Editor.end(editor, lastBlock[1]);
-
   } catch (error) {
-    console.error("Error converting offset to point:", offset, error);
+    console.error('Error converting offset to point:', offset, error);
     return null;
   }
 };
@@ -118,9 +118,8 @@ const offsetToPoint = (editor: Editor, offset: number): Point | null => {
 const processFeedbackAndCreateRefs = (
   editor: Editor,
   fullText: string, // Exact string sent to the backend
-  feedbackList: FeedbackComment[]
+  feedbackList: FeedbackComment[],
 ): ProcessedFeedback[] => {
-
   const processedFeedback: ProcessedFeedback[] = [];
   const textLength = fullText.length;
 
@@ -128,25 +127,35 @@ const processFeedbackAndCreateRefs = (
     const { global_highlight_start, global_highlight_end } = comment;
 
     if (typeof global_highlight_start !== 'number' || typeof global_highlight_end !== 'number') {
-      console.warn(`Invalid index types for feedback (item ${idx}): start=${global_highlight_start}, end=${global_highlight_end}`);
+      console.warn(
+        `Invalid index types for feedback (item ${idx}): start=${global_highlight_start}, end=${global_highlight_end}`,
+      );
       return;
     }
     if (global_highlight_start < 0 || global_highlight_end < 0) {
-      console.warn(`Negative indices received for feedback (item ${idx}): start=${global_highlight_start}, end=${global_highlight_end}`);
+      console.warn(
+        `Negative indices received for feedback (item ${idx}): start=${global_highlight_start}, end=${global_highlight_end}`,
+      );
       return;
     }
     if (global_highlight_start > global_highlight_end) {
-      console.warn(`Invalid range (start > end) for feedback (item ${idx}): [${global_highlight_start}-${global_highlight_end}]`);
+      console.warn(
+        `Invalid range (start > end) for feedback (item ${idx}): [${global_highlight_start}-${global_highlight_end}]`,
+      );
       return;
     }
     // Allow zero-length highlights if start === end
     // This is discouraged on the back end, but may happen and is not entirely illegal
     if (global_highlight_start === global_highlight_end) {
-      console.log(`Zero-length highlight detected (item ${idx}): [${global_highlight_start}-${global_highlight_end}]. Processing as insertion point.`);
+      console.log(
+        `Zero-length highlight detected (item ${idx}): [${global_highlight_start}-${global_highlight_end}]. Processing as insertion point.`,
+      );
     }
 
     if (global_highlight_start > textLength || global_highlight_end > textLength) {
-      console.warn(`Indices out of bounds for feedback (item ${idx}): [${global_highlight_start}-${global_highlight_end}]. Text length: ${textLength}`);
+      console.warn(
+        `Indices out of bounds for feedback (item ${idx}): [${global_highlight_start}-${global_highlight_end}]. Text length: ${textLength}`,
+      );
       return;
     }
 
@@ -164,7 +173,9 @@ const processFeedbackAndCreateRefs = (
 
         // Allow collapsed ranges if start === end, otherwise check
         const isCollapsedRange = Range.isCollapsed(range);
-        const isValidRange = (global_highlight_start < global_highlight_end && !isCollapsedRange) || (global_highlight_start === global_highlight_end && isCollapsedRange)
+        const isValidRange =
+          (global_highlight_start < global_highlight_end && !isCollapsedRange) ||
+          (global_highlight_start === global_highlight_end && isCollapsedRange);
 
         if (isValidRange && !Range.isBackward(range)) {
           const rangeRef = Editor.rangeRef(editor, range);
@@ -178,18 +189,28 @@ const processFeedbackAndCreateRefs = (
           // Debug: Logging each comment as we attempt to process a highlight for it
           // console.log(`Feedback item ${idx} processed successfully. Range:`, range, `Global: [${global_highlight_start}-${global_highlight_end}]`);
         } else {
-          console.warn(`Mapped Slate range invalid, collapsed incorrectly, or backward for feedback (item ${idx}). Range:`, JSON.stringify(range), `Global: [${global_highlight_start}-${global_highlight_end}]`);
+          console.warn(
+            `Mapped Slate range invalid, collapsed incorrectly, or backward for feedback (item ${idx}). Range:`,
+            JSON.stringify(range),
+            `Global: [${global_highlight_start}-${global_highlight_end}]`,
+          );
         }
       } catch (e) {
-        console.error(`Error validating points/rangeRef for feedback (item ${idx}). Global: [${global_highlight_start}-${global_highlight_end}]. Anchor: ${JSON.stringify(anchorPoint)}, Focus: ${JSON.stringify(focusPoint)}`, e);
+        console.error(
+          `Error validating points/rangeRef for feedback (item ${idx}). Global: [${global_highlight_start}-${global_highlight_end}]. Anchor: ${JSON.stringify(anchorPoint)}, Focus: ${JSON.stringify(focusPoint)}`,
+          e,
+        );
       }
-
     } else {
-      console.warn(`Failed to create Slate points for feedback (item ${idx}) with global indices [${global_highlight_start}-${global_highlight_end}]. Anchor success: ${!!anchorPoint}, Focus success: ${!!focusPoint}. Check offsetToPoint logs.`);
+      console.warn(
+        `Failed to create Slate points for feedback (item ${idx}) with global indices [${global_highlight_start}-${global_highlight_end}]. Anchor success: ${!!anchorPoint}, Focus success: ${!!focusPoint}. Check offsetToPoint logs.`,
+      );
     }
   });
 
-  console.log(`Successfully processed ${processedFeedback.length} / ${feedbackList.length} feedback items into RangeRefs using global indices.`);
+  console.log(
+    `Successfully processed ${processedFeedback.length} / ${feedbackList.length} feedback items into RangeRefs using global indices.`,
+  );
 
   processedFeedback.sort((a, b) => {
     const startA = a.global_highlight_start ?? Infinity;
@@ -210,7 +231,6 @@ function App() {
   const [referenceElement, setReferenceElement] = useState<HTMLElement | null>(null);
   const [systemChoice, setSystemChoice] = useState(defaultSystem);
 
-
   const editorRef = useRef<HTMLDivElement>(null);
   const editor = useMemo(() => withReact(createEditor()), []);
 
@@ -228,27 +248,30 @@ function App() {
   }, []);
 
   // Callback to update editor value
-  const handleEditorChange = useCallback((newValue: Descendant[]) => {
-    setEditorValue(newValue);
+  const handleEditorChange = useCallback(
+    (newValue: Descendant[]) => {
+      setEditorValue(newValue);
 
-    // Unref ranges when text is cleared
-    // const currentPlainText = getPlainText(newValue);
-    // if (currentPlainText.length === 0 && feedbackList.length > 0) {
-    //   console.log("Clearing feedback refs due to empty editor");
-    //   feedbackList.forEach(f => f.rangeRef?.unref());
-    //   setFeedbackList([]);
-    //   setActiveFeedbackId(null);
-    //   setReferenceElement(null);
-    // }
-  }, [feedbackList]);
+      // Unref ranges when text is cleared
+      // const currentPlainText = getPlainText(newValue);
+      // if (currentPlainText.length === 0 && feedbackList.length > 0) {
+      //   console.log("Clearing feedback refs due to empty editor");
+      //   feedbackList.forEach(f => f.rangeRef?.unref());
+      //   setFeedbackList([]);
+      //   setActiveFeedbackId(null);
+      //   setReferenceElement(null);
+      // }
+    },
+    [feedbackList],
+  );
 
   const handleSubmit = useCallback(async () => {
     const currentText = getPlainText(editorValue);
-    console.log("handleSubmit triggered. Draft:", draftNumber, "Text:", currentText);
+    console.log('handleSubmit triggered. Draft:', draftNumber, 'Text:', currentText);
 
     if (draftNumber > maxDrafts || !currentText.trim()) {
       if (draftNumber > maxDrafts) setError(`Maximum draft limit (${maxDrafts}) reached.`);
-      if (!currentText.trim()) setError("Please enter some text before submitting.");
+      if (!currentText.trim()) setError('Please enter some text before submitting.');
       setIsLoading(false);
       return;
     }
@@ -259,7 +282,7 @@ function App() {
     setReferenceElement(null);
 
     // Clear existing highlight rangeRefs before fetching new feedback
-    feedbackList.forEach(f => f.rangeRef?.unref());
+    feedbackList.forEach((f) => f.rangeRef?.unref());
     setFeedbackList([]);
 
     const requestData: UserRequest = {
@@ -273,68 +296,76 @@ function App() {
       const apiUrl = `${apiBaseUrl}/grammar_feedback`;
       console.log(`Attempting POST request to: ${apiUrl}`);
       const response = await axios.post<FeedbackResponse>(apiUrl, requestData);
-      console.log("API Response received:", response);
+      console.log('API Response received:', response);
 
       if (response.data && response.data.feedback_list) {
-        const processed = processFeedbackAndCreateRefs(editor, currentText, response.data.feedback_list);
+        const processed = processFeedbackAndCreateRefs(
+          editor,
+          currentText,
+          response.data.feedback_list,
+        );
         setFeedbackList(processed);
-        setDraftNumber(prev => prev + 1);
+        setDraftNumber((prev) => prev + 1);
       } else {
         setFeedbackList([]);
-        console.log("No feedback items received.");
+        console.log('No feedback items received.');
       }
     } catch (err: any) {
-      console.error("API Error encountered in handleSubmit:", err);
-      console.error("API Error Response:", err.response);
-      setError(err.response?.data?.detail || err.message || "An unknown error occurred.");
+      console.error('API Error encountered in handleSubmit:', err);
+      console.error('API Error Response:', err.response);
+      setError(err.response?.data?.detail || err.message || 'An unknown error occurred.');
       setFeedbackList([]);
     } finally {
       setIsLoading(false);
     }
   }, [editorValue, userId, draftNumber, apiBaseUrl, maxDrafts, editor, feedbackList]);
 
-  const handleHighlightClick = useCallback((feedbackId: string, event: React.MouseEvent) => {
-    const target = event.target as HTMLElement;
-    const feedback = feedbackList.find(f => f.id === feedbackId);
+  const handleHighlightClick = useCallback(
+    (feedbackId: string, event: React.MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const feedback = feedbackList.find((f) => f.id === feedbackId);
 
-    if (!feedback || !feedback.rangeRef?.current) {
-      console.warn("Could not find feedback or range for positioning:", feedbackId);
-      setActiveFeedbackId(null);
-      setReferenceElement(null);
-      return;
-    }
+      if (!feedback || !feedback.rangeRef?.current) {
+        console.warn('Could not find feedback or range for positioning:', feedbackId);
+        setActiveFeedbackId(null);
+        setReferenceElement(null);
+        return;
+      }
 
-    // If clicking the same highlight that's already active, hide it
-    if (activeFeedbackId === feedbackId) {
-      setActiveFeedbackId(null);
-      setReferenceElement(null);
-      return;
-    }
+      // If clicking the same highlight that's already active, hide it
+      if (activeFeedbackId === feedbackId) {
+        setActiveFeedbackId(null);
+        setReferenceElement(null);
+        return;
+      }
 
-    // Set the clicked highlight as active
-    setActiveFeedbackId(feedbackId);
-    setReferenceElement(target);
+      // Set the clicked highlight as active
+      setActiveFeedbackId(feedbackId);
+      setReferenceElement(target);
+    },
+    [editor, feedbackList, activeFeedbackId],
+  );
 
-  }, [editor, feedbackList, activeFeedbackId]);
+  const handleDismissFeedback = useCallback(
+    (feedbackIdToDismiss: string) => {
+      const feedbackToDismiss = feedbackList.find((f) => f.id === feedbackIdToDismiss);
 
-  const handleDismissFeedback = useCallback((feedbackIdToDismiss: string) => {
+      if (feedbackToDismiss) {
+        feedbackToDismiss.rangeRef?.unref();
+      }
 
-    const feedbackToDismiss = feedbackList.find(f => f.id === feedbackIdToDismiss);
+      setFeedbackList((currentFeedback) =>
+        currentFeedback.filter((f) => f.id !== feedbackIdToDismiss),
+      );
 
-    if (feedbackToDismiss) {
-      feedbackToDismiss.rangeRef?.unref();
-    }
-
-    setFeedbackList(currentFeedback =>
-      currentFeedback.filter(f => f.id !== feedbackIdToDismiss)
-    );
-
-    // If the dismissed card was the active one, hide the card
-    if (activeFeedbackId === feedbackIdToDismiss) {
-      setActiveFeedbackId(null);
-      setReferenceElement(null);
-    }
-  }, [activeFeedbackId, feedbackList]);
+      // If the dismissed card was the active one, hide the card
+      if (activeFeedbackId === feedbackIdToDismiss) {
+        setActiveFeedbackId(null);
+        setReferenceElement(null);
+      }
+    },
+    [activeFeedbackId, feedbackList],
+  );
 
   // Handle clicking outside the card to hide it (but not dismiss)
   const handleClickOutside = useCallback(() => {
@@ -344,14 +375,15 @@ function App() {
 
   const activeFeedback = useMemo(() => {
     if (!activeFeedbackId) return null;
-    return feedbackList.find(f => f.id === activeFeedbackId) || null;
+    return feedbackList.find((f) => f.id === activeFeedbackId) || null;
   }, [activeFeedbackId, feedbackList]);
 
   return (
     <div className="app-container">
       <h1>Grammar Feedback Tool</h1>
       <div className="app-description">
-        Submit your essay draft, choose a feedback system, and click submit to see feedback on grammar, vocabulary, and spelling issues.
+        Submit your essay draft, choose a feedback system, and click submit to see feedback on
+        grammar, vocabulary, and spelling issues.
       </div>
       <div className="editor-area" ref={editorRef}>
         <EssayEditor
@@ -381,7 +413,6 @@ function App() {
         setSystemChoice={setSystemChoice}
       />
     </div>
-
   );
 }
 
