@@ -1,5 +1,4 @@
 import { Editor, Range } from 'slate';
-import { v4 as uuidv4 } from 'uuid';
 import { apiOffsetsToRange } from './editorText';
 import { FeedbackComment, ProcessedFeedback } from './types/api';
 
@@ -36,7 +35,7 @@ export const createFeedbackRanges = (
 
       processed.push({
         ...comment,
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         rangeRef: Editor.rangeRef(editor, range),
         original_global_highlight_start: start,
         original_global_highlight_end: end,

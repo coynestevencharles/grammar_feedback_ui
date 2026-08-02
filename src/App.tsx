@@ -1,8 +1,6 @@
-import axios from 'axios';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { createEditor, Descendant, Editor } from 'slate';
 import { ReactEditor, withReact } from 'slate-react';
-import { v4 as uuidv4 } from 'uuid';
 import './App.css';
 import EssayEditor from './components/EssayEditor';
 import FeedbackCard from './components/FeedbackCard';
@@ -36,7 +34,7 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
     if (storedUserId) {
       return storedUserId;
     } else {
-      const newUserId = uuidv4();
+      const newUserId = crypto.randomUUID();
       localStorage.setItem('user_id', newUserId);
       return newUserId;
     }
@@ -75,21 +73,44 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
 
     try {
       const apiUrl = `${apiBaseUrl}/grammar_feedback`;
-      const response = await axios.post<FeedbackResponse>(apiUrl, requestData);
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData),
+      });
 
-      if (response.data && response.data.feedback_list) {
-        const processed = createFeedbackRanges(editor, currentText, response.data.feedback_list);
+      if (!response.ok) {
+        let message = `Request failed with status ${response.status}.`;
+
+        try {
+          const errorBody: unknown = await response.json();
+          if (
+            typeof errorBody === 'object' &&
+            errorBody !== null &&
+            'detail' in errorBody &&
+            typeof errorBody.detail === 'string'
+          ) {
+            message = errorBody.detail;
+          }
+        } catch {
+          // Keep the status-based message when the error response is not JSON.
+        }
+
+        throw new Error(message);
+      }
+
+      const responseData = (await response.json()) as FeedbackResponse;
+
+      if (responseData.feedback_list) {
+        const processed = createFeedbackRanges(editor, currentText, responseData.feedback_list);
         setFeedbackList(processed);
         setDraftNumber((prev) => prev + 1);
       } else {
         setFeedbackList([]);
       }
     } catch (err: unknown) {
-      if (axios.isAxiosError<{ detail?: string }>(err)) {
-        setError(err.response?.data?.detail || err.message || 'An unknown error occurred.');
-      } else {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-      }
+      const message = err instanceof TypeError ? 'Network Error' : undefined;
+      setError(message ?? (err instanceof Error ? err.message : 'An unknown error occurred.'));
       setFeedbackList([]);
     } finally {
       setIsLoading(false);

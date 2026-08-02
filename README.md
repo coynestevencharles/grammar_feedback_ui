@@ -12,7 +12,13 @@ The default back end logic can be handled by `https://github.com/coynestevenchar
 
 ## Getting Started
 
-Install [Node.js](https://nodejs.org/) and npm.
+Install Node.js 24 LTS and npm 11. The repository includes an `.nvmrc`, so nvm
+users can select the supported runtime with:
+
+```bash
+nvm install
+nvm use
+```
 
 Install the locked dependencies:
 
