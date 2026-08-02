@@ -9,7 +9,7 @@ interface EssayEditorProps {
   value: Descendant[];
   onChange: (value: Descendant[]) => void;
   feedbackList: ProcessedFeedback[];
-  onHighlightClick: (feedbackId: string, event: React.MouseEvent) => void;
+  onHighlightClick: (feedbackId: string, event: React.SyntheticEvent) => void;
   activeFeedbackId: string | null;
 }
 
@@ -75,9 +75,19 @@ const EssayEditor: React.FC<EssayEditorProps> = ({
         styledChildren = (
           <span
             className={`highlight ${customLeaf.activeHighlight ? 'active' : ''}`}
+            role="button"
+            tabIndex={0}
+            aria-label={`Open grammar feedback for "${customLeaf.text}"`}
             onClick={(e) => {
               e.preventDefault();
               if (customLeaf.feedbackId) {
+                onHighlightClick(customLeaf.feedbackId, e);
+              }
+            }}
+            onKeyDown={(e) => {
+              if ((e.key === 'Enter' || e.key === ' ') && customLeaf.feedbackId) {
+                e.preventDefault();
+                e.stopPropagation();
                 onHighlightClick(customLeaf.feedbackId, e);
               }
             }}
