@@ -1,4 +1,5 @@
 import React from 'react';
+import { FeedbackSystem } from '../types/api';
 import './controls.css';
 
 type ControlsProps = {
@@ -7,8 +8,8 @@ type ControlsProps = {
   isLoading: boolean;
   error: string | null;
   handleSubmit: () => void;
-  systemChoice: string;
-  setSystemChoice: (value: string) => void;
+  systemChoice: FeedbackSystem;
+  setSystemChoice: (value: FeedbackSystem) => void;
 };
 
 const Controls: React.FC<ControlsProps> = ({
@@ -56,10 +57,7 @@ const Controls: React.FC<ControlsProps> = ({
               name="system_choice"
               value="rule-based"
               checked={systemChoice === 'rule-based'}
-              onChange={() => {
-                setSystemChoice('rule-based');
-                console.log('rule-based selected; current systemChoice:', 'rule-based');
-              }}
+              onChange={() => setSystemChoice('rule-based')}
             />
             Rule-based
           </label>
@@ -69,10 +67,7 @@ const Controls: React.FC<ControlsProps> = ({
               name="system_choice"
               value="llm-based"
               checked={systemChoice === 'llm-based'}
-              onChange={() => {
-                setSystemChoice('llm-based');
-                console.log('llm-based selected; current systemChoice:', 'llm-based');
-              }}
+              onChange={() => setSystemChoice('llm-based')}
             />
             LLM-based*
           </label>

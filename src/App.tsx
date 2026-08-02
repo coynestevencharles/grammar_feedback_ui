@@ -1,227 +1,24 @@
 import axios from 'axios';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import {
-  BaseElement,
-  createEditor,
-  Descendant,
-  Editor,
-  Element,
-  Point,
-  Range,
-  Node as SlateNode,
-  Text,
-} from 'slate';
-import { withReact } from 'slate-react';
+import { createEditor, Descendant, Editor } from 'slate';
+import { ReactEditor, withReact } from 'slate-react';
 import { v4 as uuidv4 } from 'uuid';
 import './App.css';
 import EssayEditor from './components/EssayEditor';
 import FeedbackCard from './components/FeedbackCard';
 import Controls from './components/controls';
-import { FeedbackComment, FeedbackResponse, ProcessedFeedback, UserRequest } from './types/api';
+import { serializeEditorDocument } from './editorText';
+import { createFeedbackRanges } from './feedbackRanges';
+import { FeedbackResponse, FeedbackSystem, ProcessedFeedback, UserRequest } from './types/api';
 import { apiBaseUrl, maxDrafts, defaultSystem } from './utils/constants';
 
-const getPlainText = (nodes: Descendant[]): string => {
-  // DEBUG: Log the nodes being processed
-  // console.log("getPlainText called with nodes:", JSON.stringify(nodes, null, 2));
-
-  // Return the plain text by joining the text of each node and accounting for newlines
-  const plainText = nodes
-    .map((node) => {
-      if (Text.isText(node)) {
-        return node.text;
-      } else if (Element.isElement(node)) {
-        // For elements, join their text children with a newline
-        return node.children.map((child) => (Text.isText(child) ? child.text : '')).join('\n');
-      }
-      return '';
-    })
-    .join('\n');
-  // DEBUG: Log the generated plain text (verbose)
-  // console.log("Plain text generated:", plainText);
-  return plainText;
-};
-
-//  NOTE: CHANGED
 const initialValue = [{ type: 'paragraph', children: [{ text: '' }] }];
 
-const offsetToPoint = (editor: Editor, offset: number): Point | null => {
-  try {
-    // Get all block nodes from the editor
-    const blockEntries = Array.from(
-      Editor.nodes(editor, {
-        at: [],
-        match: (n) => 'children' in n && Editor.isBlock(editor, n),
-      }),
-    );
-
-    if (blockEntries.length === 0) return null;
-
-    if (offset === 0) {
-      return Editor.start(editor, blockEntries[0][1]);
-    }
-
-    // Calculate the cumulative length of each block plus newlines
-    let currentOffset = 0;
-
-    for (let blockIdx = 0; blockIdx < blockEntries.length; blockIdx++) {
-      const [blockNode, blockPath] = blockEntries[blockIdx];
-
-      // Get text nodes within this block
-      const textEntries = Array.from(
-        SlateNode.texts(blockNode as BaseElement, { from: [], to: [] }),
-      );
-
-      // Process each text node in this block
-      for (const [textNode, textPath] of textEntries) {
-        const textLength = textNode.text.length;
-
-        // If the offset is within this text node
-        if (offset > currentOffset && offset <= currentOffset + textLength) {
-          const localOffset = offset - currentOffset;
-
-          return {
-            path: textPath,
-            offset: localOffset,
-          };
-        }
-
-        // Add newline if this is not the last text node in the block
-        // NOTE: This is critical to match with the backend's text length
-        if (textEntries.length > 1 && textNode !== textEntries[textEntries.length - 1][0]) {
-          currentOffset += textLength + 1;
-        }
-
-        if (offset === currentOffset) {
-          if (textEntries.length > 0) {
-            const lastTextPath = textEntries[textEntries.length - 1][1];
-            const lastTextNode = textEntries[textEntries.length - 1][0];
-            return {
-              path: lastTextPath,
-              offset: lastTextNode.text.length,
-            };
-          } else {
-            // Block with no text nodes
-            return Editor.end(editor, blockPath);
-          }
-        }
-      }
-    }
-
-    const lastBlock = blockEntries[blockEntries.length - 1];
-    return Editor.end(editor, lastBlock[1]);
-  } catch (error) {
-    console.error('Error converting offset to point:', offset, error);
-    return null;
-  }
+type GrammarFeedbackApplicationProps = {
+  editor: Editor & ReactEditor;
 };
 
-const processFeedbackAndCreateRefs = (
-  editor: Editor,
-  fullText: string, // Exact string sent to the backend
-  feedbackList: FeedbackComment[],
-): ProcessedFeedback[] => {
-  const processedFeedback: ProcessedFeedback[] = [];
-  const textLength = fullText.length;
-
-  feedbackList.forEach((comment, idx) => {
-    const { global_highlight_start, global_highlight_end } = comment;
-
-    if (typeof global_highlight_start !== 'number' || typeof global_highlight_end !== 'number') {
-      console.warn(
-        `Invalid index types for feedback (item ${idx}): start=${global_highlight_start}, end=${global_highlight_end}`,
-      );
-      return;
-    }
-    if (global_highlight_start < 0 || global_highlight_end < 0) {
-      console.warn(
-        `Negative indices received for feedback (item ${idx}): start=${global_highlight_start}, end=${global_highlight_end}`,
-      );
-      return;
-    }
-    if (global_highlight_start > global_highlight_end) {
-      console.warn(
-        `Invalid range (start > end) for feedback (item ${idx}): [${global_highlight_start}-${global_highlight_end}]`,
-      );
-      return;
-    }
-    // Allow zero-length highlights if start === end
-    // This is discouraged on the back end, but may happen and is not entirely illegal
-    if (global_highlight_start === global_highlight_end) {
-      console.log(
-        `Zero-length highlight detected (item ${idx}): [${global_highlight_start}-${global_highlight_end}]. Processing as insertion point.`,
-      );
-    }
-
-    if (global_highlight_start > textLength || global_highlight_end > textLength) {
-      console.warn(
-        `Indices out of bounds for feedback (item ${idx}): [${global_highlight_start}-${global_highlight_end}]. Text length: ${textLength}`,
-      );
-      return;
-    }
-
-    const anchorPoint = offsetToPoint(editor, global_highlight_start);
-    const focusPoint = offsetToPoint(editor, global_highlight_end);
-
-    if (anchorPoint && focusPoint) {
-      const range = { anchor: anchorPoint, focus: focusPoint };
-
-      try {
-        // Debug logging
-        // console.log(`Creating rangeRef for feedback (item ${idx}) with global indices [${global_highlight_start}-${global_highlight_end}]`);
-        Editor.point(editor, anchorPoint);
-        Editor.point(editor, focusPoint);
-
-        // Allow collapsed ranges if start === end, otherwise check
-        const isCollapsedRange = Range.isCollapsed(range);
-        const isValidRange =
-          (global_highlight_start < global_highlight_end && !isCollapsedRange) ||
-          (global_highlight_start === global_highlight_end && isCollapsedRange);
-
-        if (isValidRange && !Range.isBackward(range)) {
-          const rangeRef = Editor.rangeRef(editor, range);
-          processedFeedback.push({
-            ...comment,
-            id: uuidv4(),
-            rangeRef: rangeRef,
-            original_global_highlight_start: global_highlight_start,
-            original_global_highlight_end: global_highlight_end,
-          });
-          // Debug: Logging each comment as we attempt to process a highlight for it
-          // console.log(`Feedback item ${idx} processed successfully. Range:`, range, `Global: [${global_highlight_start}-${global_highlight_end}]`);
-        } else {
-          console.warn(
-            `Mapped Slate range invalid, collapsed incorrectly, or backward for feedback (item ${idx}). Range:`,
-            JSON.stringify(range),
-            `Global: [${global_highlight_start}-${global_highlight_end}]`,
-          );
-        }
-      } catch (e) {
-        console.error(
-          `Error validating points/rangeRef for feedback (item ${idx}). Global: [${global_highlight_start}-${global_highlight_end}]. Anchor: ${JSON.stringify(anchorPoint)}, Focus: ${JSON.stringify(focusPoint)}`,
-          e,
-        );
-      }
-    } else {
-      console.warn(
-        `Failed to create Slate points for feedback (item ${idx}) with global indices [${global_highlight_start}-${global_highlight_end}]. Anchor success: ${!!anchorPoint}, Focus success: ${!!focusPoint}. Check offsetToPoint logs.`,
-      );
-    }
-  });
-
-  console.log(
-    `Successfully processed ${processedFeedback.length} / ${feedbackList.length} feedback items into RangeRefs using global indices.`,
-  );
-
-  processedFeedback.sort((a, b) => {
-    const startA = a.global_highlight_start ?? Infinity;
-    const startB = b.global_highlight_start ?? Infinity;
-    return startA - startB;
-  });
-
-  return processedFeedback;
-};
-
-function App() {
+export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicationProps) {
   const [editorValue, setEditorValue] = useState<Descendant[]>(initialValue);
   const [feedbackList, setFeedbackList] = useState<ProcessedFeedback[]>([]);
   const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
@@ -229,11 +26,9 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [draftNumber, setDraftNumber] = useState<number>(1);
   const [referenceElement, setReferenceElement] = useState<HTMLElement | null>(null);
-  const [systemChoice, setSystemChoice] = useState(defaultSystem);
+  const [systemChoice, setSystemChoice] = useState<FeedbackSystem>(defaultSystem);
 
   const editorRef = useRef<HTMLDivElement>(null);
-  const editor = useMemo(() => withReact(createEditor()), []);
-
   // Initialize user ID and system choice
   const userId = useMemo(() => {
     // TODO: More robust user identification for rate limiting, etc.
@@ -253,15 +48,7 @@ function App() {
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    const currentText = getPlainText(editorValue);
-    console.log(
-      'handleSubmit triggered. Draft:',
-      draftNumber,
-      'System:',
-      systemChoice,
-      'Text:',
-      currentText,
-    );
+    const currentText = serializeEditorDocument(editorValue);
 
     if (draftNumber > maxDrafts || !currentText.trim()) {
       if (draftNumber > maxDrafts) setError(`Maximum draft limit (${maxDrafts}) reached.`);
@@ -288,26 +75,17 @@ function App() {
 
     try {
       const apiUrl = `${apiBaseUrl}/grammar_feedback`;
-      console.log(`Attempting POST request to: ${apiUrl}`);
       const response = await axios.post<FeedbackResponse>(apiUrl, requestData);
-      console.log('API Response received:', response);
 
       if (response.data && response.data.feedback_list) {
-        const processed = processFeedbackAndCreateRefs(
-          editor,
-          currentText,
-          response.data.feedback_list,
-        );
+        const processed = createFeedbackRanges(editor, currentText, response.data.feedback_list);
         setFeedbackList(processed);
         setDraftNumber((prev) => prev + 1);
       } else {
         setFeedbackList([]);
-        console.log('No feedback items received.');
       }
     } catch (err: unknown) {
-      console.error('API Error encountered in handleSubmit:', err);
       if (axios.isAxiosError<{ detail?: string }>(err)) {
-        console.error('API Error Response:', err.response);
         setError(err.response?.data?.detail || err.message || 'An unknown error occurred.');
       } else {
         setError(err instanceof Error ? err.message : 'An unknown error occurred.');
@@ -319,12 +97,11 @@ function App() {
   }, [editorValue, userId, draftNumber, editor, feedbackList, systemChoice]);
 
   const handleHighlightClick = useCallback(
-    (feedbackId: string, event: React.MouseEvent) => {
+    (feedbackId: string, event: React.SyntheticEvent) => {
       const target = event.target as HTMLElement;
       const feedback = feedbackList.find((f) => f.id === feedbackId);
 
       if (!feedback || !feedback.rangeRef?.current) {
-        console.warn('Could not find feedback or range for positioning:', feedbackId);
         setActiveFeedbackId(null);
         setReferenceElement(null);
         return;
@@ -412,6 +189,11 @@ function App() {
       />
     </div>
   );
+}
+
+function App() {
+  const editor = useMemo(() => withReact(createEditor()), []);
+  return <GrammarFeedbackApplication editor={editor} />;
 }
 
 export default App;

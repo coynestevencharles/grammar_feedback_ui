@@ -1,5 +1,7 @@
 import { RangeRef } from 'slate';
 
+export type FeedbackSystem = 'rule-based' | 'llm-based';
+
 export interface FeedbackComment {
   index: number;
   source: string;
@@ -22,7 +24,7 @@ export interface FeedbackResponse {
 
 export interface UserRequest {
   user_id: string;
-  system_choice: string;
+  system_choice: FeedbackSystem;
   draft_number: number;
   text: string;
 }
