@@ -34,6 +34,7 @@ Then open your browser and navigate to `http://localhost:5173`
 ## Development checks
 
 ```bash
+npm test
 npm run format:check
 npm run lint
 npm run build
@@ -44,3 +45,16 @@ Prettier is the repository formatter. Apply it with:
 ```bash
 npm run format
 ```
+
+## Tests
+
+```bash
+npm test
+npm run test:watch
+npm run test:coverage
+npm run test:e2e
+```
+
+Testing is done with Vitest, React Testing Library, and Playwright.
+
+The Playwright test uses Chromium to verify the Slate contenteditable. To use this, install that browser once with `npx playwright install chromium`.
