@@ -116,6 +116,22 @@ describe('grammar feedback application', () => {
     expect(screen.queryByText('This is a synthetic explanation.')).not.toBeInTheDocument();
   });
 
+  test('submits with the rule-based system by default', async () => {
+    let receivedRequest: UserRequest | undefined;
+    server.use(
+      http.post(apiUrl, async ({ request }) => {
+        receivedRequest = (await request.json()) as UserRequest;
+        return HttpResponse.json(successfulResponse());
+      }),
+    );
+    const editor = renderApplication();
+    const user = await enterText(editor, 'Synthetic text.');
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+
+    await waitFor(() => expect(receivedRequest?.system_choice).toBe('rule-based'));
+  });
+
   test('shows a server detail error and restores the submit button', async () => {
     server.use(
       http.post(apiUrl, () =>
@@ -135,6 +151,21 @@ describe('grammar feedback application', () => {
     expect(screen.getByRole('button', { name: 'Submit Draft 1' })).toBeEnabled();
   });
 
+  test('shows the HTTP status when a server error is not JSON', async () => {
+    server.use(http.post(apiUrl, () => new HttpResponse('Service unavailable', { status: 503 })));
+    const editor = renderApplication();
+    const user = await enterText(editor, 'Synthetic text.');
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+
+    expect(
+      await screen.findByText(
+        (_, element) => element?.textContent === 'Error: Request failed with status 503.',
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Submit Draft 1' })).toBeEnabled();
+  });
+
   test('shows a network error and restores the submit button', async () => {
     server.use(http.post(apiUrl, () => HttpResponse.error()));
     const editor = renderApplication();
@@ -146,6 +177,35 @@ describe('grammar feedback application', () => {
       await screen.findByText((_, element) => element?.textContent === 'Error: Network Error'),
     ).toBeVisible();
     expect(screen.getByRole('button', { name: 'Submit Draft 1' })).toBeEnabled();
+  });
+
+  test('prevents duplicate submissions while feedback is loading', async () => {
+    let releaseRequest!: () => void;
+    const requestGate = new Promise<void>((resolve) => {
+      releaseRequest = resolve;
+    });
+    const requestReceived = vi.fn();
+    server.use(
+      http.post(apiUrl, async () => {
+        requestReceived();
+        await requestGate;
+        return HttpResponse.json(successfulResponse());
+      }),
+    );
+    const editor = renderApplication();
+    const user = await enterText(editor, 'Synthetic text.');
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+
+    const pendingButton = await screen.findByRole('button', { name: 'Checking...' });
+    expect(pendingButton).toBeDisabled();
+    await user.click(pendingButton);
+    expect(requestReceived).toHaveBeenCalledTimes(1);
+
+    releaseRequest();
+    expect(
+      await screen.findByText((_, element) => element?.textContent === 'Draft: 2 / 3'),
+    ).toBeVisible();
   });
 
   test('stops accepting submissions after three successful drafts', async () => {
