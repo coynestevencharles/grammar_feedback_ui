@@ -1,6 +1,6 @@
-import React from 'react';
-import { FeedbackSystem } from '../types/api';
-import './controls.css';
+import type { FeedbackSystem } from '@/types/api';
+
+import { Button } from '@/components/ui/button';
 
 type ControlsProps = {
   draftNumber: number;
@@ -12,7 +12,7 @@ type ControlsProps = {
   setSystemChoice: (value: FeedbackSystem) => void;
 };
 
-const Controls: React.FC<ControlsProps> = ({
+const Controls = ({
   draftNumber,
   maxDrafts,
   isLoading,
@@ -20,61 +20,74 @@ const Controls: React.FC<ControlsProps> = ({
   handleSubmit,
   systemChoice,
   setSystemChoice,
-}) => {
+}: ControlsProps) => {
   return (
-    <div
-      className="controls-row"
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        gap: '2rem',
-      }}
-    >
-      <div className="submission-controls" style={{ flex: 1 }}>
-        {draftNumber > maxDrafts ? (
-          <p className="final-draft-notice">Final Draft: No further feedback will be generated.</p>
-        ) : (
-          <p>
-            Draft: {draftNumber} / {maxDrafts}
-          </p>
-        )}
-        <button onClick={handleSubmit} disabled={isLoading || draftNumber > maxDrafts}>
-          {isLoading
-            ? 'Checking...'
-            : draftNumber > maxDrafts
-              ? 'Submit'
-              : `Submit Draft ${draftNumber}`}
-        </button>
-        {error && <p className="error-message">Error: {error}</p>}
-      </div>
-      <div className="system-controls" style={{ flex: 1 }}>
-        <fieldset>
-          <legend>Choose Feedback System:</legend>
-          <label style={{ marginRight: '1em' }}>
+    <section className="border-b bg-background" aria-label="Draft controls">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+        <div className="flex flex-wrap items-center gap-3">
+          {draftNumber > maxDrafts ? (
+            <p className="min-w-28 text-sm font-medium text-brand">
+              Final Draft: No further feedback will be generated.
+            </p>
+          ) : (
+            <p className="min-w-28 text-sm font-medium">
+              Draft: {draftNumber} / {maxDrafts}
+            </p>
+          )}
+          <Button
+            type="button"
+            size="lg"
+            className="min-h-11"
+            onClick={handleSubmit}
+            disabled={isLoading || draftNumber > maxDrafts}
+          >
+            {isLoading
+              ? 'Checking...'
+              : draftNumber > maxDrafts
+                ? 'Submit'
+                : `Submit Draft ${draftNumber}`}
+          </Button>
+        </div>
+
+        <fieldset className="flex min-w-0 flex-wrap items-center gap-2">
+          <legend className="mb-1 w-full text-xs font-medium text-muted-foreground sm:mb-0 sm:mr-1 sm:w-auto">
+            Feedback system
+          </legend>
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm transition-colors has-checked:border-brand has-checked:bg-brand/10">
             <input
               type="radio"
               name="system_choice"
               value="rule-based"
               checked={systemChoice === 'rule-based'}
               onChange={() => setSystemChoice('rule-based')}
+              className="size-4 accent-brand"
             />
             Rule-based
           </label>
-          <label>
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm transition-colors has-checked:border-brand has-checked:bg-brand/10">
             <input
               type="radio"
               name="system_choice"
               value="llm-based"
               checked={systemChoice === 'llm-based'}
               onChange={() => setSystemChoice('llm-based')}
+              className="size-4 accent-brand"
             />
             LLM-based*
           </label>
-          <p className="note">* Usage limits apply.</p>
+          <span className="text-xs text-muted-foreground">* Usage limits apply.</span>
         </fieldset>
+
+        {error && (
+          <p
+            className="w-full rounded-lg border border-destructive/25 bg-destructive/8 px-3 py-2 text-sm font-medium text-destructive lg:order-last"
+            role="alert"
+          >
+            Error: {error}
+          </p>
+        )}
       </div>
-    </div>
+    </section>
   );
 };
 

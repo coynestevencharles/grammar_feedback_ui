@@ -7,8 +7,8 @@ import { createGrammarFeedbackEditor } from '@/components/editor/editor-kit';
 import { commentPlugin } from '@/components/editor/plugins/comment-kit';
 import {
   attachFeedbackResponse,
-  clearFeedbackAnnotations,
   dismissFeedback,
+  replaceFeedbackResponse,
 } from '@/feedbackAnnotations';
 import type { FeedbackComment, FeedbackResponse } from '@/types/api';
 
@@ -73,21 +73,26 @@ describe('feedback annotations', () => {
     expect(editor.getApi(commentPlugin).comment.has({ id: second!.id })).toBe(true);
   });
 
-  test('clears all attached Plate comment marks', () => {
+  test('replaces all attached Plate comment marks after a later response', () => {
     const source = 'She go home.';
     const editor = createGrammarFeedbackEditor([paragraph(source)]);
-    const discussions = attachFeedbackResponse(
+    const previousDiscussions = attachFeedbackResponse(
       editor,
       source,
       responseFor([feedbackFor(source, 4, 6, 0), feedbackFor(source, 4, 11, 1)]),
     );
 
-    clearFeedbackAnnotations(editor);
+    const nextResponse = {
+      ...responseFor([feedbackFor(source, 7, 11, 2)]),
+      response_id: '11111111-1111-4111-8111-111111111111',
+    };
+    const nextDiscussions = replaceFeedbackResponse(editor, source, nextResponse);
 
-    expect(discussions).toHaveLength(2);
-    for (const discussion of discussions) {
+    for (const discussion of previousDiscussions) {
       expect(editor.getApi(commentPlugin).comment.has({ id: discussion.id })).toBe(false);
     }
+    expect(nextDiscussions).toHaveLength(1);
+    expect(editor.getApi(commentPlugin).comment.has({ id: nextDiscussions[0]!.id })).toBe(true);
   });
 
   test('skips mismatched and collapsed ranges with redacted diagnostics', () => {
@@ -110,5 +115,40 @@ describe('feedback annotations', () => {
     expect(diagnostics).toContain('highlight_mismatch');
     expect(diagnostics).toContain('collapsed_range');
     warn.mockRestore();
+  });
+
+  test('propagates unexpected Plate transform failures with redacted diagnostics', () => {
+    const source = 'Private synthetic source.';
+    const editor = createGrammarFeedbackEditor([paragraph(source)]);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(editor.tf, 'setNodes').mockImplementation(() => {
+      throw new Error(`transform failed for ${source}`);
+    });
+
+    expect(() =>
+      attachFeedbackResponse(editor, source, responseFor([feedbackFor(source, 0, 7)])),
+    ).toThrow('Feedback annotations could not be displayed.');
+
+    expect(error).toHaveBeenCalledTimes(1);
+    const diagnostics = JSON.stringify(error.mock.calls);
+    expect(diagnostics).toContain('feedback_annotation_failed');
+    expect(diagnostics).not.toContain(source);
+    error.mockRestore();
+  });
+
+  test('maps a combining-character annotation across a multiline Plate document', () => {
+    const firstLine = 'Cafe\u0301.';
+    const secondLine = 'Next line.';
+    const source = `${firstLine}\n${secondLine}`;
+    const editor = createGrammarFeedbackEditor([paragraph(firstLine), paragraph(secondLine)]);
+
+    const discussions = attachFeedbackResponse(
+      editor,
+      source,
+      responseFor([feedbackFor(source, 3, 5)]),
+    );
+
+    expect(discussions).toEqual([expect.objectContaining({ highlight_text: 'e\u0301' })]);
+    expect(editor.getApi(commentPlugin).comment.has({ id: discussions[0]!.id })).toBe(true);
   });
 });

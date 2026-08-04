@@ -1,17 +1,15 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { Value } from 'platejs';
 
-import './App.css';
 import type { GrammarFeedbackEditor } from '@/components/editor/editor-kit';
 import { initialEditorValue, useGrammarFeedbackEditor } from '@/components/editor/editor-kit';
 import EssayEditor from '@/components/EssayEditor';
 import Controls from '@/components/controls';
 import { serializeEditorDocument } from '@/editorText';
 import {
-  attachFeedbackResponse,
-  clearFeedbackAnnotations,
   deactivateFeedback,
   dismissFeedback,
+  replaceFeedbackResponse,
 } from '@/feedbackAnnotations';
 import type {
   FeedbackDiscussion,
@@ -23,6 +21,16 @@ import { apiBaseUrl, defaultSystem, maxDrafts } from '@/utils/constants';
 
 type GrammarFeedbackApplicationProps = {
   editor: GrammarFeedbackEditor;
+};
+
+const scrollEditorIntoViewOnMobile = () => {
+  if (!window.matchMedia?.('(max-width: 767px)').matches) return;
+
+  window.requestAnimationFrame(() => {
+    document
+      .getElementById('essay-workspace')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 };
 
 export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicationProps) {
@@ -99,9 +107,9 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
       }
 
       const responseData = (await response.json()) as FeedbackResponse;
-      clearFeedbackAnnotations(editor);
-      setFeedbackList(attachFeedbackResponse(editor, currentText, responseData));
+      setFeedbackList(replaceFeedbackResponse(editor, currentText, responseData));
       setDraftNumber((previous) => previous + 1);
+      scrollEditorIntoViewOnMobile();
     } catch (caught: unknown) {
       const message = caught instanceof TypeError ? 'Network Error' : undefined;
       setError(
@@ -123,21 +131,18 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
   );
 
   return (
-    <div className="app-container">
-      <h1>Grammar Feedback Tool</h1>
-      <div className="app-description">
-        Submit your essay draft, choose a feedback system, and click submit to see feedback on
-        grammar, vocabulary, and spelling issues.
-      </div>
-      <div className="editor-area">
-        <EssayEditor
-          discussions={feedbackList}
-          editor={editor}
-          onChange={handleEditorChange}
-          onDismiss={handleDismissFeedback}
-          readOnly={isLoading}
-        />
-      </div>
+    <div className="flex min-h-dvh flex-col overflow-x-hidden bg-muted/35 text-foreground md:h-dvh md:min-h-[32rem] md:overflow-hidden">
+      <header className="border-b bg-background">
+        <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-1 px-4 py-4 sm:px-6 lg:px-8">
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+            Grammar Feedback Tool
+          </h1>
+          <p className="max-w-4xl text-sm leading-6 text-muted-foreground">
+            Submit your essay draft, choose a feedback system, and click submit to see feedback on
+            grammar, vocabulary, and spelling issues.
+          </p>
+        </div>
+      </header>
       <Controls
         draftNumber={draftNumber}
         maxDrafts={maxDrafts}
@@ -147,6 +152,15 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
         systemChoice={systemChoice}
         setSystemChoice={setSystemChoice}
       />
+      <main className="mx-auto flex w-full max-w-[1600px] flex-1 px-0 py-0 sm:px-4 sm:py-4 md:min-h-0 md:overflow-hidden lg:px-8">
+        <EssayEditor
+          discussions={feedbackList}
+          editor={editor}
+          onChange={handleEditorChange}
+          onDismiss={handleDismissFeedback}
+          readOnly={isLoading}
+        />
+      </main>
     </div>
   );
 }

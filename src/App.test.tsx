@@ -31,8 +31,11 @@ const feedbackFor = (
   global_highlight_end: highlightEnd,
 });
 
-const successfulResponse = (feedbackList: FeedbackComment[] = []): FeedbackResponse => ({
-  response_id: '00000000-0000-4000-8000-000000000000',
+const successfulResponse = (
+  feedbackList: FeedbackComment[] = [],
+  responseId = '00000000-0000-4000-8000-000000000000',
+): FeedbackResponse => ({
+  response_id: responseId,
   feedback_list: feedbackList,
   metadata: { system_used: 'rule-based' },
 });
@@ -79,7 +82,7 @@ describe('grammar feedback application', () => {
     expect(requestReceived).not.toHaveBeenCalled();
   });
 
-  test('submits the selected system and turns returned feedback into a dismissible card', async () => {
+  test('submits the selected system and turns returned feedback into a dismissible sidebar item', async () => {
     localStorage.setItem('user_id', 'stable-synthetic-user');
     let receivedRequest: UserRequest | undefined;
     const source = 'She go home.';
@@ -134,7 +137,7 @@ describe('grammar feedback application', () => {
     await waitFor(() => expect(receivedRequest?.system_choice).toBe('rule-based'));
   });
 
-  test('shows every feedback item attached to an overlapping highlight', async () => {
+  test('shows overlapping feedback one item at a time in backend order', async () => {
     const source = 'She go home.';
     const first = feedbackFor(source, 4, 6);
     const second = {
@@ -154,7 +157,44 @@ describe('grammar feedback application', () => {
     );
 
     expect(await screen.findByText('Synthetic feedback')).toBeVisible();
-    expect(screen.getByText('Second synthetic feedback')).toBeVisible();
+    expect(screen.getByText('1 of 2')).toBeVisible();
+    expect(screen.queryByText('Second synthetic feedback')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Next feedback' }));
+
+    expect(await screen.findByText('Second synthetic feedback')).toBeVisible();
+    expect(screen.getByText('2 of 2')).toBeVisible();
+    expect(screen.queryByText('Synthetic feedback')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Previous feedback' }));
+    expect(await screen.findByText('Synthetic feedback')).toBeVisible();
+  });
+
+  test('selects the matching feedback when a highlight is clicked', async () => {
+    const source = 'She go home.';
+    const first = feedbackFor(source, 4, 6);
+    const second = {
+      ...feedbackFor(source, 7, 11),
+      index: 1,
+      error_tag: 'Home feedback',
+      feedback_explanation: 'Feedback for the second highlight.',
+    };
+    server.use(http.post(apiUrl, () => HttpResponse.json(successfulResponse([first, second]))));
+    const editor = renderApplication();
+    const user = await enterText(editor, source);
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+    expect(await screen.findByText('Synthetic feedback')).toBeVisible();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Open grammar feedback for "home"',
+      }),
+    );
+
+    expect(await screen.findByText('Home feedback')).toBeVisible();
+    expect(screen.getByText('Feedback for the second highlight.')).toBeVisible();
+    expect(screen.getByText('2 of 2')).toBeVisible();
   });
 
   test('shows a server detail error and restores the submit button', async () => {
@@ -242,6 +282,89 @@ describe('grammar feedback application', () => {
     expect(screen.getByRole('button', { name: 'Submit Draft 2' })).toBeEnabled();
   });
 
+  test('replaces existing annotations after a later successful submission', async () => {
+    const source = 'She go home.';
+    const firstFeedback = feedbackFor(source, 4, 6);
+    const secondFeedback = {
+      ...feedbackFor(source, 7, 11),
+      error_tag: 'Replacement feedback',
+      index: 1,
+    };
+    let requestCount = 0;
+    server.use(
+      http.post(apiUrl, () => {
+        requestCount += 1;
+        return requestCount === 1
+          ? HttpResponse.json(
+              successfulResponse([firstFeedback], '11111111-1111-4111-8111-111111111111'),
+            )
+          : HttpResponse.json(
+              successfulResponse([secondFeedback], '22222222-2222-4222-8222-222222222222'),
+            );
+      }),
+    );
+    const editor = renderApplication();
+    const user = await enterText(editor, source);
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+    expect(
+      await screen.findByRole('button', { name: 'Open grammar feedback for "go"' }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 2' }));
+
+    expect(
+      await screen.findByRole('button', { name: 'Open grammar feedback for "home"' }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole('button', { name: 'Open grammar feedback for "go"' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Replacement feedback')).toBeVisible();
+  });
+
+  test('retains existing feedback when a later response cannot be annotated', async () => {
+    const source = 'She go home.';
+    let requestCount = 0;
+    server.use(
+      http.post(apiUrl, () => {
+        requestCount += 1;
+        const feedback =
+          requestCount === 1 ? feedbackFor(source, 4, 6) : feedbackFor(source, 7, 11);
+        return HttpResponse.json(
+          successfulResponse(
+            [feedback],
+            requestCount === 1
+              ? '11111111-1111-4111-8111-111111111111'
+              : '22222222-2222-4222-8222-222222222222',
+          ),
+        );
+      }),
+    );
+    const editor = renderApplication();
+    const user = await enterText(editor, source);
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+    const originalHighlight = await screen.findByRole('button', {
+      name: 'Open grammar feedback for "go"',
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(editor.tf, 'setNodes').mockImplementation(() => {
+      throw new Error('synthetic Plate failure');
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 2' }));
+
+    expect(
+      await screen.findByText(
+        (_, element) =>
+          element?.textContent === 'Error: Feedback annotations could not be displayed.',
+      ),
+    ).toBeVisible();
+    expect(originalHighlight).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Open grammar feedback for "home"' })).toBeNull();
+    error.mockRestore();
+  });
+
   test('prevents duplicate submissions while feedback is loading', async () => {
     let releaseRequest!: () => void;
     const requestGate = new Promise<void>((resolve) => {
@@ -270,7 +393,9 @@ describe('grammar feedback application', () => {
     expect(
       await screen.findByText((_, element) => element?.textContent === 'Draft: 2 / 3'),
     ).toBeVisible();
-    expect(screen.getByLabelText('Essay text')).toHaveAttribute('contenteditable', 'true');
+    await waitFor(() =>
+      expect(screen.getByLabelText('Essay text')).toHaveAttribute('contenteditable', 'true'),
+    );
   });
 
   test('stops accepting submissions after three successful drafts', async () => {

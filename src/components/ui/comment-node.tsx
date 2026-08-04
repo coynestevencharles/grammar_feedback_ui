@@ -1,9 +1,8 @@
-'use client';
-
 import type { TCommentText } from 'platejs';
 import type { PlateLeafProps } from 'platejs/react';
 
 import { getCommentCount, getCommentKeyId, getCommentKeys } from '@platejs/comment';
+import { PathApi, TextApi } from 'platejs';
 import { PlateLeaf, useEditorPlugin, usePluginOption } from 'platejs/react';
 
 import { cn } from '@/lib/utils';
@@ -12,43 +11,61 @@ import { commentPlugin } from '@/components/editor/plugins/comment-kit';
 export function CommentLeaf(props: PlateLeafProps<TCommentText>) {
   const { children, leaf } = props;
 
-  const { api, setOption } = useEditorPlugin(commentPlugin);
+  const { api, editor, setOption } = useEditorPlugin(commentPlugin);
   const hoverId = usePluginOption(commentPlugin, 'hoverId');
   const activeId = usePluginOption(commentPlugin, 'activeId');
 
   const isOverlapping = getCommentCount(leaf) > 1;
   const currentId = api.comment.nodeId(leaf);
-  const isActive = activeId === currentId;
+  const ids = getCommentKeys(leaf).map(getCommentKeyId);
+  const isActive = activeId !== null && ids.includes(activeId);
   const isHover = hoverId === currentId;
+  const path = editor.api.findPath(props.text);
+  const previousText = path
+    ? editor.api.previous<TCommentText>({ at: path, match: TextApi.isText })
+    : undefined;
+  const nextText = path
+    ? editor.api.next<TCommentText>({ at: path, match: TextApi.isText })
+    : undefined;
 
-  const activate = (element: HTMLElement) => {
-    const ids = getCommentKeys(leaf).map(getCommentKeyId);
+  const continuesActiveHighlight = (entry: typeof previousText) =>
+    activeId !== null &&
+    path !== undefined &&
+    entry !== undefined &&
+    PathApi.equals(path.slice(0, -1), entry[1].slice(0, -1)) &&
+    getCommentKeys(entry[0]).map(getCommentKeyId).includes(activeId);
 
-    setOption('activeElement', element);
+  const activate = () => {
     setOption('activeId', ids[0] ?? null);
-    setOption('activeIds', ids);
   };
 
   return (
     <PlateLeaf
       {...props}
       className={cn(
-        'border-b-2 border-b-highlight/[.36] bg-highlight/[.13] transition-colors duration-200',
-        (isHover || isActive) && 'border-b-highlight bg-highlight/25',
+        'box-decoration-clone rounded-[0.18em] border-b-2 border-b-highlight/[.36] bg-highlight/[.13] transition-[background-color,border-color,outline-color] duration-200',
+        isHover && 'border-b-highlight bg-highlight/25',
         isOverlapping && 'border-b-2 border-b-highlight/[.7] bg-highlight/25',
-        (isHover || isActive) && isOverlapping && 'border-b-highlight bg-highlight/45',
+        isHover && isOverlapping && 'border-b-highlight bg-highlight/45',
+        isActive && 'feedback-highlight-active relative z-10',
       )}
       attributes={{
         ...props.attributes,
-        'aria-haspopup': 'dialog',
+        'aria-controls': 'feedback-panel',
         'aria-label': `Open grammar feedback for "${leaf.text}"`,
-        onClick: (event) => activate(event.currentTarget),
+        'aria-pressed': isActive,
+        'data-feedback-ids': ids.join(' '),
+        'data-feedback-segment-end':
+          isActive && !continuesActiveHighlight(nextText) ? 'true' : undefined,
+        'data-feedback-segment-start':
+          isActive && !continuesActiveHighlight(previousText) ? 'true' : undefined,
+        onClick: activate,
         onKeyDown: (event) => {
           if (event.key !== 'Enter' && event.key !== ' ') return;
 
           event.preventDefault();
           event.stopPropagation();
-          activate(event.currentTarget);
+          activate();
         },
         onMouseEnter: () => setOption('hoverId', currentId ?? null),
         onMouseLeave: () => setOption('hoverId', null),

@@ -53,21 +53,13 @@ const validateFeedbackRange = (
   return null;
 };
 
-export const clearFeedbackAnnotations = (editor: PlateEditor) => {
+const getFeedbackIds = (editor: PlateEditor) => {
   const commentNodes = editor.getApi(commentPlugin).comment.nodes({ at: [] });
-  const feedbackIds = new Set(
-    commentNodes.flatMap(([node]) => getCommentKeys(node).map(getCommentKeyId)),
-  );
-
-  for (const feedbackId of feedbackIds) {
-    editor.getTransforms(commentPlugin).comment.unsetMark({ id: feedbackId });
-  }
+  return new Set(commentNodes.flatMap(([node]) => getCommentKeys(node).map(getCommentKeyId)));
 };
 
 export const deactivateFeedback = (editor: PlateEditor) => {
-  editor.setOption(commentPlugin, 'activeElement', null);
   editor.setOption(commentPlugin, 'activeId', null);
-  editor.setOption(commentPlugin, 'activeIds', []);
 };
 
 export const dismissFeedback = (editor: PlateEditor, feedbackId: string) => {
@@ -80,6 +72,7 @@ export const attachFeedbackResponse = (
   response: FeedbackResponse,
 ): FeedbackDiscussion[] => {
   const discussions: FeedbackDiscussion[] = [];
+  const appliedIds: string[] = [];
 
   for (const feedback of response.feedback_list) {
     const validationFailure = validateFeedbackRange(submittedText, feedback);
@@ -113,10 +106,38 @@ export const attachFeedbackResponse = (
           split: true,
         },
       );
+      appliedIds.push(id);
       discussions.push({ ...feedback, id });
     } catch {
-      warnSkippedAnnotation(response.response_id, feedback, 'unmappable_range');
+      for (const appliedId of [...appliedIds, id]) {
+        try {
+          dismissFeedback(editor, appliedId);
+        } catch {
+          // Preserve the original failure while making a best-effort rollback.
+        }
+      }
+
+      console.error('feedback_annotation_failed', {
+        feedbackIndex: feedback.index,
+        responseId: response.response_id,
+      });
+      throw new Error('Feedback annotations could not be displayed.');
     }
+  }
+
+  return discussions;
+};
+
+export const replaceFeedbackResponse = (
+  editor: PlateEditor,
+  submittedText: string,
+  response: FeedbackResponse,
+): FeedbackDiscussion[] => {
+  const previousIds = getFeedbackIds(editor);
+  const discussions = attachFeedbackResponse(editor, submittedText, response);
+
+  for (const previousId of previousIds) {
+    dismissFeedback(editor, previousId);
   }
 
   return discussions;
