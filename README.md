@@ -1,8 +1,9 @@
 # Grammar Feedback UI
 
-A simple text editor interface with a feedback comment feature.
-
-The system highlights spans of interest and produces feedback "cards" when users click the highlights.
+A Plate-based text editor interface with a feedback comment feature.
+The application highlights text spans returned from a feedback generation API,
+and shows one selected feedback comment at a time. These are displayed in a sidebar on desktop, or a bottom dock on mobile,
+with previous, next, and dismiss controls.
 
 The default back end logic can be handled by `https://github.com/coynestevencharles/grammar_feedback_api`
 
@@ -73,7 +74,8 @@ npm run test:e2e
 
 Testing is done with Vitest, React Testing Library, and Playwright.
 
-The Playwright test uses Chromium to verify the Slate contenteditable. To use this, install that browser once with `npx playwright install chromium`.
+The Playwright test uses Chromium to check the Plate editor and other UI elements.
+To use this, install that browser once with `npx playwright install chromium`.
 
 Coverage and Playwright are intentionally not part of pre-commit: coverage has
 no threshold, and Playwright requires a separately installed browser. Run them
