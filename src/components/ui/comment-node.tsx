@@ -7,6 +7,7 @@ import { PlateLeaf, useEditorPlugin, usePluginOption } from 'platejs/react';
 
 import { cn } from '@/lib/utils';
 import { commentPlugin } from '@/components/editor/plugins/comment-kit';
+import { selectFeedbackId } from '@/feedbackSelection';
 
 export function CommentLeaf(props: PlateLeafProps<TCommentText>) {
   const { children, leaf } = props;
@@ -14,6 +15,7 @@ export function CommentLeaf(props: PlateLeafProps<TCommentText>) {
   const { api, editor, setOption } = useEditorPlugin(commentPlugin);
   const hoverId = usePluginOption(commentPlugin, 'hoverId');
   const activeId = usePluginOption(commentPlugin, 'activeId');
+  const feedbackSelectionMetadata = usePluginOption(commentPlugin, 'feedbackSelectionMetadata');
 
   const isOverlapping = getCommentCount(leaf) > 1;
   const currentId = api.comment.nodeId(leaf);
@@ -36,7 +38,7 @@ export function CommentLeaf(props: PlateLeafProps<TCommentText>) {
     getCommentKeys(entry[0]).map(getCommentKeyId).includes(activeId);
 
   const activate = () => {
-    setOption('activeId', ids[0] ?? null);
+    setOption('activeId', selectFeedbackId(ids, feedbackSelectionMetadata));
   };
 
   return (

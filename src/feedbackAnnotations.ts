@@ -6,6 +6,7 @@ import { KEYS, TextApi } from 'platejs';
 
 import { commentPlugin } from '@/components/editor/plugins/comment-kit';
 import { apiOffsetsToRange } from '@/editorText';
+import type { FeedbackSelectionMetadataById } from '@/feedbackSelection';
 import type { FeedbackComment, FeedbackDiscussion, FeedbackResponse } from '@/types/api';
 
 type AnnotationSkipReason =
@@ -64,6 +65,11 @@ export const deactivateFeedback = (editor: PlateEditor) => {
 
 export const dismissFeedback = (editor: PlateEditor, feedbackId: string) => {
   editor.getTransforms(commentPlugin).comment.unsetMark({ id: feedbackId });
+
+  const currentMetadata = editor.getOption(commentPlugin, 'feedbackSelectionMetadata');
+  const remainingMetadata = { ...currentMetadata };
+  delete remainingMetadata[feedbackId];
+  editor.setOption(commentPlugin, 'feedbackSelectionMetadata', remainingMetadata);
 };
 
 export const attachFeedbackResponse = (
@@ -124,6 +130,21 @@ export const attachFeedbackResponse = (
       throw new Error('Feedback annotations could not be displayed.');
     }
   }
+
+  const currentMetadata = editor.getOption(commentPlugin, 'feedbackSelectionMetadata');
+  const attachedMetadata = Object.fromEntries(
+    discussions.map((discussion) => [
+      discussion.id,
+      {
+        index: discussion.index,
+        spanLength: discussion.global_highlight_end - discussion.global_highlight_start,
+      },
+    ]),
+  ) as FeedbackSelectionMetadataById;
+  editor.setOption(commentPlugin, 'feedbackSelectionMetadata', {
+    ...currentMetadata,
+    ...attachedMetadata,
+  });
 
   return discussions;
 };

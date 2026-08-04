@@ -235,6 +235,18 @@ test('joins an active broad highlight across leaves split by narrower comments',
     ]),
   );
   expect(fragmentStyles.every((style) => style.outlineStyle === 'none')).toBe(true);
+
+  await page.getByRole('button', { name: 'Open grammar feedback for "who"' }).click();
+  await expect(page.getByText('Who feedback', { exact: true })).toBeVisible();
+  await expect(page.getByText('2 of 3')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Open grammar feedback for "she"' }).click();
+  await expect(page.getByText('She feedback', { exact: true })).toBeVisible();
+  await expect(page.getByText('3 of 3')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Open grammar feedback for " is name Nancy"' }).click();
+  await expect(page.getByText('Broad feedback', { exact: true })).toBeVisible();
+  await expect(page.getByText('1 of 3')).toBeVisible();
 });
 
 test('mobile docks one comment above the visual keyboard without horizontal overflow', async ({

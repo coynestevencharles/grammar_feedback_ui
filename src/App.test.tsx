@@ -170,6 +170,96 @@ describe('grammar feedback application', () => {
     expect(await screen.findByText('Synthetic feedback')).toBeVisible();
   });
 
+  test('prioritizes a nested comment over identical broad comments on click and keyboard', async () => {
+    const source = 'A B C';
+    const firstBroad = {
+      ...feedbackFor(source, 0, 5),
+      error_tag: 'First broad feedback',
+    };
+    const secondBroad = {
+      ...feedbackFor(source, 0, 5),
+      index: 1,
+      error_tag: 'Second broad feedback',
+    };
+    const narrow = {
+      ...feedbackFor(source, 2, 3),
+      index: 4,
+      error_tag: 'Narrow B feedback',
+    };
+    server.use(
+      http.post(apiUrl, () =>
+        HttpResponse.json(successfulResponse([firstBroad, secondBroad, narrow])),
+      ),
+    );
+    const editor = renderApplication();
+    const user = await enterText(editor, source);
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+    expect(await screen.findByText('First broad feedback')).toBeVisible();
+
+    const narrowHighlight = screen.getByRole('button', {
+      name: 'Open grammar feedback for "B"',
+    });
+    await user.click(narrowHighlight);
+    expect(await screen.findByText('Narrow B feedback')).toBeVisible();
+    expect(screen.getByText('3 of 3')).toBeVisible();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Open grammar feedback for "A "',
+      }),
+    );
+    expect(await screen.findByText('First broad feedback')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Next feedback' }));
+    expect(await screen.findByText('Second broad feedback')).toBeVisible();
+
+    narrowHighlight.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByText('Narrow B feedback')).toBeVisible();
+  });
+
+  test('uses response index for partial-overlap ties and sole comments outside the overlap', async () => {
+    const source = 'A B C';
+    const left = {
+      ...feedbackFor(source, 0, 3),
+      index: 4,
+      error_tag: 'Left feedback',
+    };
+    const right = {
+      ...feedbackFor(source, 2, 5),
+      index: 1,
+      error_tag: 'Right feedback',
+    };
+    server.use(http.post(apiUrl, () => HttpResponse.json(successfulResponse([left, right]))));
+    const editor = renderApplication();
+    const user = await enterText(editor, source);
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+    expect(await screen.findByText('Left feedback')).toBeVisible();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Open grammar feedback for "B"',
+      }),
+    );
+    expect(await screen.findByText('Right feedback')).toBeVisible();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Open grammar feedback for "A "',
+      }),
+    );
+    expect(await screen.findByText('Left feedback')).toBeVisible();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Open grammar feedback for " C"',
+      }),
+    );
+    expect(await screen.findByText('Right feedback')).toBeVisible();
+  });
+
   test('selects the matching feedback when a highlight is clicked', async () => {
     const source = 'She go home.';
     const first = feedbackFor(source, 4, 6);

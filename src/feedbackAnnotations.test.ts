@@ -57,6 +57,9 @@ describe('feedback annotations', () => {
         .comment.nodes({ at: [], id })
         .some(([node]) => node[getCommentKey(id)] === true),
     ).toBe(true);
+    expect(editor.getOption(commentPlugin, 'feedbackSelectionMetadata')).toEqual({
+      [id]: { index: 0, spanLength: 2 },
+    });
   });
 
   test('keeps an overlapping annotation when another is dismissed', () => {
@@ -71,6 +74,9 @@ describe('feedback annotations', () => {
 
     expect(editor.getApi(commentPlugin).comment.has({ id: first!.id })).toBe(false);
     expect(editor.getApi(commentPlugin).comment.has({ id: second!.id })).toBe(true);
+    expect(editor.getOption(commentPlugin, 'feedbackSelectionMetadata')).toEqual({
+      [second!.id]: { index: 1, spanLength: 7 },
+    });
   });
 
   test('replaces all attached Plate comment marks after a later response', () => {
@@ -93,6 +99,9 @@ describe('feedback annotations', () => {
     }
     expect(nextDiscussions).toHaveLength(1);
     expect(editor.getApi(commentPlugin).comment.has({ id: nextDiscussions[0]!.id })).toBe(true);
+    expect(editor.getOption(commentPlugin, 'feedbackSelectionMetadata')).toEqual({
+      [nextDiscussions[0]!.id]: { index: 2, spanLength: 4 },
+    });
   });
 
   test('skips mismatched and collapsed ranges with redacted diagnostics', () => {
@@ -120,19 +129,30 @@ describe('feedback annotations', () => {
   test('propagates unexpected Plate transform failures with redacted diagnostics', () => {
     const source = 'Private synthetic source.';
     const editor = createGrammarFeedbackEditor([paragraph(source)]);
+    const [existingDiscussion] = attachFeedbackResponse(
+      editor,
+      source,
+      responseFor([feedbackFor(source, 8, 17, 0)]),
+    );
+    const existingMetadata = editor.getOption(commentPlugin, 'feedbackSelectionMetadata');
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.spyOn(editor.tf, 'setNodes').mockImplementation(() => {
       throw new Error(`transform failed for ${source}`);
     });
 
     expect(() =>
-      attachFeedbackResponse(editor, source, responseFor([feedbackFor(source, 0, 7)])),
+      attachFeedbackResponse(editor, source, {
+        ...responseFor([feedbackFor(source, 0, 7)]),
+        response_id: '11111111-1111-4111-8111-111111111111',
+      }),
     ).toThrow('Feedback annotations could not be displayed.');
 
     expect(error).toHaveBeenCalledTimes(1);
     const diagnostics = JSON.stringify(error.mock.calls);
     expect(diagnostics).toContain('feedback_annotation_failed');
     expect(diagnostics).not.toContain(source);
+    expect(editor.getOption(commentPlugin, 'feedbackSelectionMetadata')).toEqual(existingMetadata);
+    expect(editor.getApi(commentPlugin).comment.has({ id: existingDiscussion!.id })).toBe(true);
     error.mockRestore();
   });
 
