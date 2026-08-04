@@ -1,10 +1,12 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { createEditor, Editor, Transforms } from 'slate';
-import { withReact } from 'slate-react';
 import { describe, expect, test, vi } from 'vitest';
 import { GrammarFeedbackApplication } from './App';
+import {
+  createGrammarFeedbackEditor,
+  type GrammarFeedbackEditor,
+} from './components/editor/editor-kit';
 import { server } from './test/server';
 import { FeedbackComment, FeedbackResponse, UserRequest } from './types/api';
 import { apiBaseUrl } from './utils/constants';
@@ -36,21 +38,21 @@ const successfulResponse = (feedbackList: FeedbackComment[] = []): FeedbackRespo
 });
 
 const renderApplication = () => {
-  const editor = withReact(createEditor());
+  const editor = createGrammarFeedbackEditor();
   render(<GrammarFeedbackApplication editor={editor} />);
   return editor;
 };
 
-const enterText = async (editor: Editor, text: string) => {
+const enterText = async (editor: GrammarFeedbackEditor, text: string) => {
   const user = userEvent.setup();
 
   await act(async () => {
-    Transforms.select(editor, Editor.start(editor, []));
+    editor.tf.select(editor.api.start([]));
     const lines = text.split('{Enter}');
     for (const [index, line] of lines.entries()) {
-      Editor.insertText(editor, line);
+      editor.tf.insertText(line);
       if (index < lines.length - 1) {
-        Editor.insertBreak(editor);
+        editor.tf.insertBreak();
       }
     }
   });
@@ -132,6 +134,29 @@ describe('grammar feedback application', () => {
     await waitFor(() => expect(receivedRequest?.system_choice).toBe('rule-based'));
   });
 
+  test('shows every feedback item attached to an overlapping highlight', async () => {
+    const source = 'She go home.';
+    const first = feedbackFor(source, 4, 6);
+    const second = {
+      ...feedbackFor(source, 4, 6),
+      index: 1,
+      error_tag: 'Second synthetic feedback',
+    };
+    server.use(http.post(apiUrl, () => HttpResponse.json(successfulResponse([first, second]))));
+    const editor = renderApplication();
+    const user = await enterText(editor, source);
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+    await user.click(
+      await screen.findByRole('button', {
+        name: 'Open grammar feedback for "go"',
+      }),
+    );
+
+    expect(await screen.findByText('Synthetic feedback')).toBeVisible();
+    expect(screen.getByText('Second synthetic feedback')).toBeVisible();
+  });
+
   test('shows a server detail error and restores the submit button', async () => {
     server.use(
       http.post(apiUrl, () =>
@@ -179,6 +204,44 @@ describe('grammar feedback application', () => {
     expect(screen.getByRole('button', { name: 'Submit Draft 1' })).toBeEnabled();
   });
 
+  test('retains existing feedback when a later submission fails', async () => {
+    const source = 'She go home.';
+    let requestCount = 0;
+    server.use(
+      http.post(apiUrl, () => {
+        requestCount += 1;
+        if (requestCount === 1) {
+          return HttpResponse.json(successfulResponse([feedbackFor(source, 4, 6)]));
+        }
+
+        return HttpResponse.json({ detail: 'Synthetic request was rejected.' }, { status: 400 });
+      }),
+    );
+    const editor = renderApplication();
+    const user = await enterText(editor, source);
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+    expect(
+      await screen.findByRole('button', {
+        name: 'Open grammar feedback for "go"',
+      }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 2' }));
+
+    expect(
+      await screen.findByText(
+        (_, element) => element?.textContent === 'Error: Synthetic request was rejected.',
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole('button', {
+        name: 'Open grammar feedback for "go"',
+      }),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Submit Draft 2' })).toBeEnabled();
+  });
+
   test('prevents duplicate submissions while feedback is loading', async () => {
     let releaseRequest!: () => void;
     const requestGate = new Promise<void>((resolve) => {
@@ -199,6 +262,7 @@ describe('grammar feedback application', () => {
 
     const pendingButton = await screen.findByRole('button', { name: 'Checking...' });
     expect(pendingButton).toBeDisabled();
+    expect(screen.getByLabelText('Essay text')).toHaveAttribute('contenteditable', 'false');
     await user.click(pendingButton);
     expect(requestReceived).toHaveBeenCalledTimes(1);
 
@@ -206,6 +270,7 @@ describe('grammar feedback application', () => {
     expect(
       await screen.findByText((_, element) => element?.textContent === 'Draft: 2 / 3'),
     ).toBeVisible();
+    expect(screen.getByLabelText('Essay text')).toHaveAttribute('contenteditable', 'true');
   });
 
   test('stops accepting submissions after three successful drafts', async () => {
@@ -290,6 +355,7 @@ describe('grammar feedback application', () => {
         global_highlight_end: 99,
       },
     ];
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     server.use(
       http.post(apiUrl, () =>
         HttpResponse.json(successfulResponse([validFeedback, ...invalidFeedback])),
@@ -309,5 +375,7 @@ describe('grammar feedback application', () => {
     expect(within(editor).getAllByRole('button', { name: /Open grammar feedback/ })).toHaveLength(
       1,
     );
+    expect(warn).toHaveBeenCalledTimes(3);
+    warn.mockRestore();
   });
 });

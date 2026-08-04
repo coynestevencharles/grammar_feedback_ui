@@ -1,5 +1,3 @@
-import { RangeRef } from 'slate';
-
 export type FeedbackSystem = 'rule-based' | 'llm-based';
 
 export interface FeedbackComment {
@@ -29,9 +27,6 @@ export interface UserRequest {
   text: string;
 }
 
-export interface ProcessedFeedback extends FeedbackComment {
+export interface FeedbackDiscussion extends FeedbackComment {
   id: string;
-  rangeRef: RangeRef | null;
-  original_global_highlight_start: number;
-  original_global_highlight_end: number;
 }

@@ -1,12 +1,13 @@
-import { createEditor, Descendant } from 'slate';
+import type { Value } from 'platejs';
+
 import { describe, expect, test } from 'vitest';
+import { createGrammarFeedbackEditor } from './components/editor/editor-kit';
 import { apiOffsetsToRange, serializeEditorDocument } from './editorText';
 
-const paragraph = (...texts: string[]): Descendant =>
-  ({
-    type: 'paragraph',
-    children: texts.map((text) => ({ text })),
-  }) as Descendant;
+const paragraph = (...texts: string[]): Value[number] => ({
+  type: 'paragraph',
+  children: texts.map((text) => ({ text })),
+});
 
 describe('editor text contract', () => {
   test('serializes adjacent leaves without separators and top-level blocks with newlines', () => {
@@ -16,8 +17,7 @@ describe('editor text contract', () => {
   });
 
   test('maps API code-point offsets across accented and non-BMP text', () => {
-    const editor = createEditor();
-    editor.children = [paragraph('😀 Café are busy.')];
+    const editor = createGrammarFeedbackEditor([paragraph('😀 Café are busy.')]);
     const text = serializeEditorDocument(editor.children);
 
     expect(apiOffsetsToRange(editor, text, 7, 10)).toEqual({
@@ -27,8 +27,7 @@ describe('editor text contract', () => {
   });
 
   test('maps offsets onto the second top-level block after the serialized newline', () => {
-    const editor = createEditor();
-    editor.children = [paragraph('First line'), paragraph('Second line')];
+    const editor = createGrammarFeedbackEditor([paragraph('First line'), paragraph('Second line')]);
     const text = serializeEditorDocument(editor.children);
 
     expect(apiOffsetsToRange(editor, text, 11, 17)).toEqual({
@@ -42,8 +41,7 @@ describe('editor text contract', () => {
     [3, 2],
     [0, 99],
   ])('rejects invalid API range %s..%s', (start, end) => {
-    const editor = createEditor();
-    editor.children = [paragraph('Text')];
+    const editor = createGrammarFeedbackEditor([paragraph('Text')]);
 
     expect(apiOffsetsToRange(editor, 'Text', start, end)).toBeNull();
   });

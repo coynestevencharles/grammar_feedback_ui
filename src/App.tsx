@@ -1,47 +1,48 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { createEditor, Descendant, Editor } from 'slate';
-import { ReactEditor, withReact } from 'slate-react';
-import './App.css';
-import EssayEditor from './components/EssayEditor';
-import FeedbackCard from './components/FeedbackCard';
-import Controls from './components/controls';
-import { serializeEditorDocument } from './editorText';
-import { createFeedbackRanges } from './feedbackRanges';
-import { FeedbackResponse, FeedbackSystem, ProcessedFeedback, UserRequest } from './types/api';
-import { apiBaseUrl, maxDrafts, defaultSystem } from './utils/constants';
+import { useCallback, useMemo, useState } from 'react';
+import type { Value } from 'platejs';
 
-const initialValue = [{ type: 'paragraph', children: [{ text: '' }] }];
+import './App.css';
+import type { GrammarFeedbackEditor } from '@/components/editor/editor-kit';
+import { initialEditorValue, useGrammarFeedbackEditor } from '@/components/editor/editor-kit';
+import EssayEditor from '@/components/EssayEditor';
+import Controls from '@/components/controls';
+import { serializeEditorDocument } from '@/editorText';
+import {
+  attachFeedbackResponse,
+  clearFeedbackAnnotations,
+  deactivateFeedback,
+  dismissFeedback,
+} from '@/feedbackAnnotations';
+import type {
+  FeedbackDiscussion,
+  FeedbackResponse,
+  FeedbackSystem,
+  UserRequest,
+} from '@/types/api';
+import { apiBaseUrl, defaultSystem, maxDrafts } from '@/utils/constants';
 
 type GrammarFeedbackApplicationProps = {
-  editor: Editor & ReactEditor;
+  editor: GrammarFeedbackEditor;
 };
 
 export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicationProps) {
-  const [editorValue, setEditorValue] = useState<Descendant[]>(initialValue);
-  const [feedbackList, setFeedbackList] = useState<ProcessedFeedback[]>([]);
-  const [activeFeedbackId, setActiveFeedbackId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [editorValue, setEditorValue] = useState<Value>(initialEditorValue);
+  const [feedbackList, setFeedbackList] = useState<FeedbackDiscussion[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [draftNumber, setDraftNumber] = useState<number>(1);
-  const [referenceElement, setReferenceElement] = useState<HTMLElement | null>(null);
+  const [draftNumber, setDraftNumber] = useState(1);
   const [systemChoice, setSystemChoice] = useState<FeedbackSystem>(defaultSystem);
 
-  const editorRef = useRef<HTMLDivElement>(null);
-  // Initialize user ID and system choice
   const userId = useMemo(() => {
-    // TODO: More robust user identification for rate limiting, etc.
     const storedUserId = localStorage.getItem('user_id');
-    if (storedUserId) {
-      return storedUserId;
-    } else {
-      const newUserId = crypto.randomUUID();
-      localStorage.setItem('user_id', newUserId);
-      return newUserId;
-    }
+    if (storedUserId) return storedUserId;
+
+    const newUserId = crypto.randomUUID();
+    localStorage.setItem('user_id', newUserId);
+    return newUserId;
   }, []);
 
-  // Callback to update editor value
-  const handleEditorChange = useCallback((newValue: Descendant[]) => {
+  const handleEditorChange = useCallback((newValue: Value) => {
     setEditorValue(newValue);
   }, []);
 
@@ -49,20 +50,19 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
     const currentText = serializeEditorDocument(editorValue);
 
     if (draftNumber > maxDrafts || !currentText.trim()) {
-      if (draftNumber > maxDrafts) setError(`Maximum draft limit (${maxDrafts}) reached.`);
-      if (!currentText.trim()) setError('Please enter some text before submitting.');
+      if (draftNumber > maxDrafts) {
+        setError(`Maximum draft limit (${maxDrafts}) reached.`);
+      }
+      if (!currentText.trim()) {
+        setError('Please enter some text before submitting.');
+      }
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
     setError(null);
-    setActiveFeedbackId(null);
-    setReferenceElement(null);
-
-    // Clear existing highlight rangeRefs before fetching new feedback
-    feedbackList.forEach((f) => f.rangeRef?.unref());
-    setFeedbackList([]);
+    deactivateFeedback(editor);
 
     const requestData: UserRequest = {
       user_id: userId,
@@ -72,8 +72,7 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
     };
 
     try {
-      const apiUrl = `${apiBaseUrl}/grammar_feedback`;
-      const response = await fetch(apiUrl, {
+      const response = await fetch(`${apiBaseUrl}/grammar_feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData),
@@ -100,79 +99,28 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
       }
 
       const responseData = (await response.json()) as FeedbackResponse;
-
-      if (responseData.feedback_list) {
-        const processed = createFeedbackRanges(editor, currentText, responseData.feedback_list);
-        setFeedbackList(processed);
-        setDraftNumber((prev) => prev + 1);
-      } else {
-        setFeedbackList([]);
-      }
-    } catch (err: unknown) {
-      const message = err instanceof TypeError ? 'Network Error' : undefined;
-      setError(message ?? (err instanceof Error ? err.message : 'An unknown error occurred.'));
-      setFeedbackList([]);
+      clearFeedbackAnnotations(editor);
+      setFeedbackList(attachFeedbackResponse(editor, currentText, responseData));
+      setDraftNumber((previous) => previous + 1);
+    } catch (caught: unknown) {
+      const message = caught instanceof TypeError ? 'Network Error' : undefined;
+      setError(
+        message ?? (caught instanceof Error ? caught.message : 'An unknown error occurred.'),
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [editorValue, userId, draftNumber, editor, feedbackList, systemChoice]);
-
-  const handleHighlightClick = useCallback(
-    (feedbackId: string, event: React.SyntheticEvent) => {
-      const target = event.target as HTMLElement;
-      const feedback = feedbackList.find((f) => f.id === feedbackId);
-
-      if (!feedback || !feedback.rangeRef?.current) {
-        setActiveFeedbackId(null);
-        setReferenceElement(null);
-        return;
-      }
-
-      // If clicking the same highlight that's already active, hide it
-      if (activeFeedbackId === feedbackId) {
-        setActiveFeedbackId(null);
-        setReferenceElement(null);
-        return;
-      }
-
-      // Set the clicked highlight as active
-      setActiveFeedbackId(feedbackId);
-      setReferenceElement(target);
-    },
-    [feedbackList, activeFeedbackId],
-  );
+  }, [draftNumber, editor, editorValue, systemChoice, userId]);
 
   const handleDismissFeedback = useCallback(
-    (feedbackIdToDismiss: string) => {
-      const feedbackToDismiss = feedbackList.find((f) => f.id === feedbackIdToDismiss);
-
-      if (feedbackToDismiss) {
-        feedbackToDismiss.rangeRef?.unref();
-      }
-
+    (feedbackId: string) => {
+      dismissFeedback(editor, feedbackId);
       setFeedbackList((currentFeedback) =>
-        currentFeedback.filter((f) => f.id !== feedbackIdToDismiss),
+        currentFeedback.filter((feedback) => feedback.id !== feedbackId),
       );
-
-      // If the dismissed card was the active one, hide the card
-      if (activeFeedbackId === feedbackIdToDismiss) {
-        setActiveFeedbackId(null);
-        setReferenceElement(null);
-      }
     },
-    [activeFeedbackId, feedbackList],
+    [editor],
   );
-
-  // Handle clicking outside the card to hide it (but not dismiss)
-  const handleClickOutside = useCallback(() => {
-    setActiveFeedbackId(null);
-    setReferenceElement(null);
-  }, []);
-
-  const activeFeedback = useMemo(() => {
-    if (!activeFeedbackId) return null;
-    return feedbackList.find((f) => f.id === activeFeedbackId) || null;
-  }, [activeFeedbackId, feedbackList]);
 
   return (
     <div className="app-container">
@@ -181,24 +129,15 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
         Submit your essay draft, choose a feedback system, and click submit to see feedback on
         grammar, vocabulary, and spelling issues.
       </div>
-      <div className="editor-area" ref={editorRef}>
+      <div className="editor-area">
         <EssayEditor
-          editorInstance={editor}
-          value={editorValue}
+          discussions={feedbackList}
+          editor={editor}
           onChange={handleEditorChange}
-          feedbackList={feedbackList}
-          onHighlightClick={handleHighlightClick}
-          activeFeedbackId={activeFeedbackId}
+          onDismiss={handleDismissFeedback}
+          readOnly={isLoading}
         />
       </div>
-      {activeFeedback && referenceElement && (
-        <FeedbackCard
-          feedback={activeFeedback}
-          onDismiss={() => handleDismissFeedback(activeFeedback.id)}
-          referenceElement={referenceElement}
-          onClickOutside={handleClickOutside}
-        />
-      )}
       <Controls
         draftNumber={draftNumber}
         maxDrafts={maxDrafts}
@@ -213,7 +152,7 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
 }
 
 function App() {
-  const editor = useMemo(() => withReact(createEditor()), []);
+  const editor = useGrammarFeedbackEditor();
   return <GrammarFeedbackApplication editor={editor} />;
 }
 
