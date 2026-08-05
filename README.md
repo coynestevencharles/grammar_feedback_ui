@@ -2,8 +2,7 @@
 
 A Plate-based text editor interface with a feedback comment feature.
 The application highlights text spans returned from a feedback generation API,
-and shows one selected feedback comment at a time. These are displayed in a sidebar on desktop, or a bottom dock on mobile,
-with previous, next, and dismiss controls.
+and shows one selected feedback comment at a time. These are displayed in a sidebar on desktop, or a bottom dock on mobile, with previous, next, and dismiss controls.
 
 The default back end logic can be handled by `https://github.com/coynestevencharles/grammar_feedback_api`
 
@@ -28,7 +27,7 @@ npm ci
 ```
 
 Configure `VITE_API_BASE_URL` in a local `.env` when the default
-`http://localhost:8000` is not appropriate. Do not commit `.env`.
+`http://localhost:8000` is not appropriate.
 
 To launch for local development:
 
