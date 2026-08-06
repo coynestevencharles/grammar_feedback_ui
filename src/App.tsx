@@ -74,6 +74,7 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
 
     const requestData: UserRequest = {
       user_id: userId,
+      assignment_id: 'free-writing',
       system_choice: systemChoice,
       draft_number: draftNumber,
       text: currentText,

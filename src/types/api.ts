@@ -22,6 +22,7 @@ export interface FeedbackResponse {
 
 export interface UserRequest {
   user_id: string;
+  assignment_id: string;
   system_choice: FeedbackSystem;
   draft_number: number;
   text: string;

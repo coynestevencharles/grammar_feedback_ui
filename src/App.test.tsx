@@ -101,6 +101,7 @@ describe('grammar feedback application', () => {
     await waitFor(() => {
       expect(receivedRequest).toEqual({
         user_id: 'stable-synthetic-user',
+        assignment_id: 'free-writing',
         system_choice: 'llm-based',
         draft_number: 1,
         text: source,
