@@ -136,7 +136,7 @@ export function FeedbackSurface({ discussions, onDismiss }: FeedbackSurfaceProps
     <aside
       id="feedback-panel"
       aria-label="Feedback details"
-      className={`${surfaceVisibility} fixed inset-x-0 z-40 max-h-[var(--feedback-max-height)] flex-col overflow-hidden border-t bg-background/98 shadow-[0_-8px_30px_rgba(15,23,42,0.14)] backdrop-blur md:static md:max-h-none md:min-h-0 md:rounded-xl md:border md:shadow-sm`}
+      className={`${surfaceVisibility} fixed inset-x-0 z-40 max-h-(--feedback-max-height) flex-col overflow-hidden border-t bg-background/98 shadow-[0_-8px_30px_rgba(15,23,42,0.14)] backdrop-blur md:static md:max-h-none md:min-h-0 md:rounded-xl md:border md:shadow-sm`}
       style={surfaceStyle}
     >
       {activeDiscussion ? (

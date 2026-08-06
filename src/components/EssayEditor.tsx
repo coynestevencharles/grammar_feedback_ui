@@ -28,12 +28,12 @@ export default function EssayEditor({
       <div
         id="essay-workspace"
         className={cn(
-          'grid min-h-[32rem] w-full min-w-0 flex-1 gap-4 md:h-full md:min-h-0 md:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_23rem]',
+          'grid min-h-128 w-full min-w-0 flex-1 gap-4 md:h-full md:min-h-0 md:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_23rem]',
           discussions.length > 0 && 'mb-[min(48dvh,24rem)] md:mb-0',
         )}
       >
         <EditorContainer
-          className="min-h-[32rem] min-w-0 overflow-y-auto bg-background shadow-sm sm:rounded-xl sm:border md:h-full md:min-h-0"
+          className="min-h-128 min-w-0 overflow-y-auto bg-background shadow-sm sm:rounded-xl sm:border md:h-full md:min-h-0"
           data-feedback-scroll-container
         >
           <Editor

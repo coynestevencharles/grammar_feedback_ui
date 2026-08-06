@@ -132,7 +132,7 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
   );
 
   return (
-    <div className="flex min-h-dvh flex-col overflow-x-hidden bg-muted/35 text-foreground md:h-dvh md:min-h-[32rem] md:overflow-hidden">
+    <div className="flex min-h-dvh flex-col overflow-x-hidden bg-muted/35 text-foreground md:h-dvh md:min-h-128 md:overflow-hidden">
       <header className="border-b bg-background">
         <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-1 px-4 py-4 sm:px-6 lg:px-8">
           <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">

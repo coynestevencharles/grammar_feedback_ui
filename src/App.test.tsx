@@ -399,13 +399,17 @@ describe('grammar feedback application', () => {
 
     await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
     expect(
-      await screen.findByRole('button', { name: 'Open grammar feedback for "go"' }),
+      await screen.findByRole('button', {
+        name: 'Open grammar feedback for "go"',
+      }),
     ).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Submit Draft 2' }));
 
     expect(
-      await screen.findByRole('button', { name: 'Open grammar feedback for "home"' }),
+      await screen.findByRole('button', {
+        name: 'Open grammar feedback for "home"',
+      }),
     ).toBeVisible();
     expect(
       screen.queryByRole('button', { name: 'Open grammar feedback for "go"' }),
@@ -452,7 +456,11 @@ describe('grammar feedback application', () => {
       ),
     ).toBeVisible();
     expect(originalHighlight).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Open grammar feedback for "home"' })).toBeNull();
+    expect(
+      screen.queryByRole('button', {
+        name: 'Open grammar feedback for "home"',
+      }),
+    ).toBeNull();
     error.mockRestore();
   });
 
@@ -474,7 +482,9 @@ describe('grammar feedback application', () => {
 
     await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
 
-    const pendingButton = await screen.findByRole('button', { name: 'Checking...' });
+    const pendingButton = await screen.findByRole('button', {
+      name: 'Checking...',
+    });
     expect(pendingButton).toBeDisabled();
     expect(screen.getByLabelText('Essay text')).toHaveAttribute('contenteditable', 'false');
     await user.click(pendingButton);

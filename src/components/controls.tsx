@@ -50,7 +50,7 @@ const Controls = ({
         </div>
 
         <fieldset className="flex min-w-0 flex-wrap items-center gap-2">
-          <legend className="mb-1 w-full text-xs font-medium text-muted-foreground sm:mb-0 sm:mr-1 sm:w-auto">
+          <legend className="mb-1 w-full text-xs font-medium text-muted-foreground sm:mr-1 sm:mb-0 sm:w-auto">
             Feedback system
           </legend>
           <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm transition-colors has-checked:border-brand has-checked:bg-brand/10">

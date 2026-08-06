@@ -231,7 +231,10 @@ test('joins an active broad highlight across leaves split by narrower comments',
   expect(fragmentStyles.at(-1)?.borderRightWidth).toBe('2px');
   expect(fragmentStyles.slice(1, -1)).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ borderLeftWidth: '0px', borderRightWidth: '0px' }),
+      expect.objectContaining({
+        borderLeftWidth: '0px',
+        borderRightWidth: '0px',
+      }),
     ]),
   );
   expect(fragmentStyles.every((style) => style.outlineStyle === 'none')).toBe(true);
@@ -280,7 +283,9 @@ test('mobile docks one comment above the visual keyboard without horizontal over
     )
     .toBeGreaterThanOrEqual(-2);
 
-  const feedbackBar = page.getByRole('complementary', { name: 'Feedback details' });
+  const feedbackBar = page.getByRole('complementary', {
+    name: 'Feedback details',
+  });
   await expect(feedbackBar).toBeVisible();
   expect(await feedbackBar.evaluate((element) => getComputedStyle(element).position)).toBe('fixed');
 

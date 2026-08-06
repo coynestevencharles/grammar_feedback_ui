@@ -15,6 +15,9 @@ export const createGrammarFeedbackEditor = (value: Value = initialEditorValue) =
   createPlateEditor({ plugins: grammarFeedbackPlugins, value });
 
 export const useGrammarFeedbackEditor = () =>
-  usePlateEditor({ plugins: grammarFeedbackPlugins, value: initialEditorValue });
+  usePlateEditor({
+    plugins: grammarFeedbackPlugins,
+    value: initialEditorValue,
+  });
 
 export type GrammarFeedbackEditor = ReturnType<typeof createGrammarFeedbackEditor>;

@@ -45,9 +45,9 @@ export function CommentLeaf(props: PlateLeafProps<TCommentText>) {
     <PlateLeaf
       {...props}
       className={cn(
-        'box-decoration-clone rounded-[0.18em] border-b-2 border-b-highlight/[.36] bg-highlight/[.13] transition-[background-color,border-color,outline-color] duration-200',
+        'rounded-[0.18em] border-b-2 border-b-highlight/36 bg-highlight/13 box-decoration-clone transition-[background-color,border-color,outline-color] duration-200',
         isHover && 'border-b-highlight bg-highlight/25',
-        isOverlapping && 'border-b-2 border-b-highlight/[.7] bg-highlight/25',
+        isOverlapping && 'border-b-2 border-b-highlight/70 bg-highlight/25',
         isHover && isOverlapping && 'border-b-highlight bg-highlight/45',
         isActive && 'feedback-highlight-active relative z-10',
       )}
