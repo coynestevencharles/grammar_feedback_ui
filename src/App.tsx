@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Value } from 'platejs';
 
 import type { GrammarFeedbackEditor } from '@/components/editor/editor-kit';
 import { initialEditorValue, useGrammarFeedbackEditor } from '@/components/editor/editor-kit';
 import EssayEditor from '@/components/EssayEditor';
 import Controls from '@/components/controls';
+import { appConfig, type AppConfig } from '@/config';
 import { serializeEditorDocument } from '@/editorText';
 import {
   deactivateFeedback,
@@ -14,13 +15,24 @@ import {
 import type {
   FeedbackDiscussion,
   FeedbackResponse,
-  FeedbackSystem,
+  PipelinesResponse,
   UserRequest,
 } from '@/types/api';
-import { apiBaseUrl, defaultSystem, maxDrafts } from '@/utils/constants';
 
 type GrammarFeedbackApplicationProps = {
   editor: GrammarFeedbackEditor;
+  config?: AppConfig;
+};
+
+const isPipelinesResponse = (value: unknown): value is PipelinesResponse => {
+  if (typeof value !== 'object' || value === null) return false;
+
+  const response = value as Partial<PipelinesResponse>;
+  return (
+    typeof response.default_pipeline === 'string' &&
+    Array.isArray(response.pipelines) &&
+    response.pipelines.every((pipeline) => typeof pipeline === 'string')
+  );
 };
 
 const scrollEditorIntoViewOnMobile = () => {
@@ -33,13 +45,62 @@ const scrollEditorIntoViewOnMobile = () => {
   });
 };
 
-export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicationProps) {
+export function GrammarFeedbackApplication({
+  editor,
+  config = appConfig,
+}: GrammarFeedbackApplicationProps) {
   const [editorValue, setEditorValue] = useState<Value>(initialEditorValue);
   const [feedbackList, setFeedbackList] = useState<FeedbackDiscussion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draftNumber, setDraftNumber] = useState(1);
-  const [systemChoice, setSystemChoice] = useState<FeedbackSystem>(defaultSystem);
+  const [pipelineIds, setPipelineIds] = useState<string[] | null>(config.demoMode ? [] : null);
+  const [selectedPipeline, setSelectedPipeline] = useState<string | null>(null);
+  const [isLoadingPipelines, setIsLoadingPipelines] = useState(config.demoMode);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!config.demoMode) return;
+
+    const abortController = new AbortController();
+
+    const loadPipelines = async () => {
+      try {
+        const response = await fetch(`${config.apiBaseUrl}/pipelines`, {
+          signal: abortController.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Pipeline request failed with status ${response.status}.`);
+        }
+
+        const responseData: unknown = await response.json();
+        if (!isPipelinesResponse(responseData)) {
+          throw new Error('The pipeline list response was invalid.');
+        }
+        if (!responseData.pipelines.includes(responseData.default_pipeline)) {
+          throw new Error('The pipeline list response was invalid.');
+        }
+
+        setPipelineIds(responseData.pipelines);
+        setSelectedPipeline(responseData.default_pipeline);
+      } catch (caught: unknown) {
+        if (abortController.signal.aborted) return;
+
+        setPipelineError(
+          caught instanceof TypeError
+            ? 'Could not load feedback pipelines.'
+            : caught instanceof Error
+              ? caught.message
+              : 'Could not load feedback pipelines.',
+        );
+      } finally {
+        if (!abortController.signal.aborted) setIsLoadingPipelines(false);
+      }
+    };
+
+    void loadPipelines();
+    return () => abortController.abort();
+  }, [config.apiBaseUrl, config.demoMode]);
 
   const userId = useMemo(() => {
     const storedUserId = localStorage.getItem('user_id');
@@ -56,13 +117,17 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
 
   const handleSubmit = useCallback(async () => {
     const currentText = serializeEditorDocument(editorValue);
+    const hasReachedDraftLimit = config.maxDrafts !== null && draftNumber > config.maxDrafts;
 
-    if (draftNumber > maxDrafts || !currentText.trim()) {
-      if (draftNumber > maxDrafts) {
-        setError(`Maximum draft limit (${maxDrafts}) reached.`);
+    if (hasReachedDraftLimit || !currentText.trim() || (config.demoMode && !selectedPipeline)) {
+      if (hasReachedDraftLimit) {
+        setError(`Maximum draft limit (${config.maxDrafts}) reached.`);
       }
       if (!currentText.trim()) {
         setError('Please enter some text before submitting.');
+      }
+      if (config.demoMode && !selectedPipeline) {
+        setError('Please select a feedback pipeline before submitting.');
       }
       setIsLoading(false);
       return;
@@ -75,13 +140,13 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
     const requestData: UserRequest = {
       user_id: userId,
       assignment_id: 'free-writing',
-      system_choice: systemChoice,
       draft_number: draftNumber,
       text: currentText,
     };
+    if (selectedPipeline !== null) requestData.system_choice = selectedPipeline;
 
     try {
-      const response = await fetch(`${apiBaseUrl}/grammar_feedback`, {
+      const response = await fetch(`${config.apiBaseUrl}/grammar_feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData),
@@ -119,7 +184,16 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
     } finally {
       setIsLoading(false);
     }
-  }, [draftNumber, editor, editorValue, systemChoice, userId]);
+  }, [
+    config.apiBaseUrl,
+    config.demoMode,
+    config.maxDrafts,
+    draftNumber,
+    editor,
+    editorValue,
+    selectedPipeline,
+    userId,
+  ]);
 
   const handleDismissFeedback = useCallback(
     (feedbackId: string) => {
@@ -139,19 +213,20 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
             Grammar Feedback Tool
           </h1>
           <p className="max-w-4xl text-sm leading-6 text-muted-foreground">
-            Submit your essay draft, choose a feedback system, and click submit to see feedback on
-            grammar, vocabulary, and spelling issues.
+            Submit your essay draft to see feedback on grammar, vocabulary, and spelling issues.
           </p>
         </div>
       </header>
       <Controls
         draftNumber={draftNumber}
-        maxDrafts={maxDrafts}
+        maxDrafts={config.maxDrafts}
         isLoading={isLoading}
-        error={error}
+        isLoadingPipelines={isLoadingPipelines}
+        error={error ?? pipelineError}
         handleSubmit={handleSubmit}
-        systemChoice={systemChoice}
-        setSystemChoice={setSystemChoice}
+        pipelineIds={pipelineIds}
+        selectedPipeline={selectedPipeline}
+        setSelectedPipeline={setSelectedPipeline}
       />
       <main className="mx-auto flex w-full max-w-[1600px] flex-1 px-0 py-0 sm:px-4 sm:py-4 md:min-h-0 md:overflow-hidden lg:px-8">
         <EssayEditor
@@ -168,7 +243,7 @@ export function GrammarFeedbackApplication({ editor }: GrammarFeedbackApplicatio
 
 function App() {
   const editor = useGrammarFeedbackEditor();
-  return <GrammarFeedbackApplication editor={editor} />;
+  return <GrammarFeedbackApplication editor={editor} config={appConfig} />;
 }
 
 export default App;

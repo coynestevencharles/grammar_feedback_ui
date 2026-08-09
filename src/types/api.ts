@@ -1,5 +1,3 @@
-export type FeedbackSystem = 'rule-based' | 'llm-based';
-
 export interface FeedbackComment {
   index: number;
   source: string;
@@ -20,10 +18,15 @@ export interface FeedbackResponse {
   metadata: Record<string, unknown>;
 }
 
+export interface PipelinesResponse {
+  default_pipeline: string;
+  pipelines: string[];
+}
+
 export interface UserRequest {
   user_id: string;
   assignment_id: string;
-  system_choice: FeedbackSystem;
+  system_choice?: string;
   draft_number: number;
   text: string;
 }

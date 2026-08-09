@@ -7,11 +7,13 @@ import {
   createGrammarFeedbackEditor,
   type GrammarFeedbackEditor,
 } from './components/editor/editor-kit';
+import { appConfig, type AppConfig } from './config';
 import { server } from './test/server';
-import { FeedbackComment, FeedbackResponse, UserRequest } from './types/api';
-import { apiBaseUrl } from './utils/constants';
+import type { FeedbackComment, FeedbackResponse, UserRequest } from './types/api';
 
-const apiUrl = `${apiBaseUrl}/grammar_feedback`;
+const apiUrl = `${appConfig.apiBaseUrl}/grammar_feedback`;
+const pipelinesUrl = `${appConfig.apiBaseUrl}/pipelines`;
+const normalConfig: AppConfig = { ...appConfig, demoMode: false };
 
 const feedbackFor = (
   source: string,
@@ -37,12 +39,12 @@ const successfulResponse = (
 ): FeedbackResponse => ({
   response_id: responseId,
   feedback_list: feedbackList,
-  metadata: { system_used: 'rule-based' },
+  metadata: { system_used: 'errant_templates_v1' },
 });
 
-const renderApplication = () => {
+const renderApplication = (config: AppConfig = normalConfig) => {
   const editor = createGrammarFeedbackEditor();
-  render(<GrammarFeedbackApplication editor={editor} />);
+  render(<GrammarFeedbackApplication editor={editor} config={config} />);
   return editor;
 };
 
@@ -82,7 +84,7 @@ describe('grammar feedback application', () => {
     expect(requestReceived).not.toHaveBeenCalled();
   });
 
-  test('submits the selected system and turns returned feedback into a dismissible sidebar item', async () => {
+  test('submits without a pipeline override and turns feedback into a dismissible sidebar item', async () => {
     localStorage.setItem('user_id', 'stable-synthetic-user');
     let receivedRequest: UserRequest | undefined;
     const source = 'She go home.';
@@ -95,14 +97,13 @@ describe('grammar feedback application', () => {
     const editor = renderApplication();
     const user = await enterText(editor, source);
 
-    await user.click(screen.getByRole('radio', { name: 'LLM-based*' }));
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
 
     await waitFor(() => {
       expect(receivedRequest).toEqual({
         user_id: 'stable-synthetic-user',
         assignment_id: 'free-writing',
-        system_choice: 'llm-based',
         draft_number: 1,
         text: source,
       });
@@ -122,7 +123,7 @@ describe('grammar feedback application', () => {
     expect(screen.queryByText('This is a synthetic explanation.')).not.toBeInTheDocument();
   });
 
-  test('submits with the rule-based system by default', async () => {
+  test('leaves pipeline selection to the backend default', async () => {
     let receivedRequest: UserRequest | undefined;
     server.use(
       http.post(apiUrl, async ({ request }) => {
@@ -135,7 +136,55 @@ describe('grammar feedback application', () => {
 
     await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
 
-    await waitFor(() => expect(receivedRequest?.system_choice).toBe('rule-based'));
+    await waitFor(() => expect(receivedRequest).toBeDefined());
+    expect(receivedRequest).not.toHaveProperty('system_choice');
+  });
+
+  test('discovers deployed pipelines in demo mode and submits with the chosen pipeline', async () => {
+    let receivedRequest: UserRequest | undefined;
+    server.use(
+      http.get(pipelinesUrl, () =>
+        HttpResponse.json({
+          default_pipeline: 'errant_templates_v1',
+          pipelines: ['errant_templates_v1', 'refine_with_dual_cls_fb_v1'],
+        }),
+      ),
+      http.post(apiUrl, async ({ request }) => {
+        receivedRequest = (await request.json()) as UserRequest;
+        return HttpResponse.json(successfulResponse());
+      }),
+    );
+    const editor = renderApplication({ ...appConfig, demoMode: true });
+    const user = await enterText(editor, 'Synthetic text.');
+
+    const defaultPipeline = await screen.findByRole('radio', {
+      name: 'errant_templates_v1',
+    });
+    const alternatePipeline = screen.getByRole('radio', {
+      name: 'refine_with_dual_cls_fb_v1',
+    });
+    expect(defaultPipeline).toBeChecked();
+    expect(alternatePipeline).not.toBeChecked();
+
+    await user.click(alternatePipeline);
+    await user.click(screen.getByRole('button', { name: 'Submit Draft 1' }));
+
+    await waitFor(() => {
+      expect(receivedRequest?.system_choice).toBe('refine_with_dual_cls_fb_v1');
+    });
+    expect(alternatePipeline).toBeChecked();
+  });
+
+  test('shows a pipeline discovery error in demo mode', async () => {
+    server.use(http.get(pipelinesUrl, () => new HttpResponse(null, { status: 503 })));
+
+    renderApplication({ ...appConfig, demoMode: true });
+
+    expect(
+      await screen.findByText('Error: Pipeline request failed with status 503.'),
+    ).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Submit Draft 1' })).toBeDisabled();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });
 
   test('shows overlapping feedback one item at a time in backend order', async () => {
@@ -526,6 +575,27 @@ describe('grammar feedback application', () => {
     ).toBeVisible();
     expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled();
     expect(submittedDrafts).toEqual([1, 2, 3]);
+  });
+
+  test('allows unlimited submissions without showing draft controls', async () => {
+    const submittedDrafts: number[] = [];
+    server.use(
+      http.post(apiUrl, async ({ request }) => {
+        submittedDrafts.push(((await request.json()) as UserRequest).draft_number);
+        return HttpResponse.json(successfulResponse());
+      }),
+    );
+    const editor = renderApplication({ ...normalConfig, maxDrafts: null });
+    const user = await enterText(editor, 'Synthetic text.');
+
+    expect(screen.queryByText(/Draft:/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await waitFor(() => expect(submittedDrafts).toEqual([1]));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => expect(submittedDrafts).toEqual([1, 2]));
+    expect(screen.queryByText(/Draft:/)).not.toBeInTheDocument();
   });
 
   test('generates and persists a user ID when none exists', async () => {

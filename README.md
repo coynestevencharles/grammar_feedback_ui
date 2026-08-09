@@ -29,6 +29,20 @@ npm ci
 Configure `VITE_API_BASE_URL` in a local `.env` when the default
 `http://localhost:8000` is not appropriate.
 
+Application behavior is configured in `src/config.ts`:
+
+- Set `demoMode` to `true` to load `GET /pipelines` at startup and show a
+  selector containing every deployed backend pipeline. The reported default is
+  selected initially, and the regular submit button uses the current choice.
+  This is a good option when manually testing the default multi-pipeline back
+  end.
+- Set `maxDrafts` to a positive number to label and limit drafts, or `null` to
+  allow unlimited submissions with a plain **Submit** button.
+
+The frontend continues sending an incrementing `draft_number` when the visible
+draft limit is disabled because that field is part of the backend request
+contract.
+
 To launch for local development:
 
 ```bash

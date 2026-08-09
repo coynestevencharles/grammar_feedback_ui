@@ -1,5 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.route('http://localhost:8000/pipelines', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        default_pipeline: 'errant_templates_v1',
+        pipelines: ['errant_templates_v1', 'refine_with_dual_cls_fb_v1'],
+      }),
+    });
+  });
+});
+
 const feedbackResponse = {
   response_id: '00000000-0000-4000-8000-000000000000',
   feedback_list: [
@@ -46,7 +58,7 @@ const feedbackResponse = {
       global_highlight_end: 17,
     },
   ],
-  metadata: { system_used: 'llm-based' },
+  metadata: { system_used: 'errant_templates_v1' },
 };
 
 const mockFeedbackRequest = async (page: Page) => {
@@ -69,7 +81,6 @@ const enterAndSubmitDraft = async (page: Page) => {
   await page.keyboard.type('First line');
   await page.keyboard.press('Enter');
   await page.keyboard.type('Second line');
-  await page.getByRole('radio', { name: 'LLM-based*' }).check();
   await page.getByRole('button', { name: 'Submit Draft 1' }).click();
   await expect(page.getByText('Draft: 2 / 3')).toBeVisible();
 };
@@ -82,12 +93,12 @@ test('desktop keeps one selected comment in a sidebar and navigates its highligh
   await page.goto('/');
   await enterAndSubmitDraft(page);
 
-  expect(getRequestBody()).toMatchObject({
-    system_choice: 'llm-based',
+  const requestBody = getRequestBody();
+  expect(requestBody).toMatchObject({
     draft_number: 1,
     text: 'First line\nSecond line',
   });
-  expect(getRequestBody()?.user_id).toMatch(
+  expect(requestBody?.user_id).toMatch(
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
 
@@ -200,7 +211,7 @@ test('joins an active broad highlight across leaves split by narrower comments',
             global_highlight_end: 21,
           },
         ],
-        metadata: { system_used: 'rule-based' },
+        metadata: { system_used: 'errant_templates_v1' },
       }),
     });
   });
